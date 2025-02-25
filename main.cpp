@@ -200,130 +200,153 @@ auto tokenize(std::string_view code) {
 } // namespace lexer
 
 namespace compiler {
-struct Grammar {
-    struct Rule;
-    struct self_t {};
-    static inline constexpr self_t self{};
-    using RuleBase = std::variant<lexer::Token::Type, Rule*, self_t>;
-    using RuleAlternative = std::vector<RuleBase>;
+
+using rule_name_t = std::string;
+// struct rule_self_t {};
+// static inline constexpr rule_self_t rule_self{};
+using ast_node_t = std::variant<lexer::Token::Type, rule_name_t>;
+using ast_stack_t = std::stack<ast_node_t>;
+using program_t = std::vector<rule_name_t>;
+
+class Grammar {
+  public:
     struct Rule {
-        std::string name;
-        std::vector<RuleAlternative> alts;
+        using chain = std::vector<ast_node_t>;
+        rule_name_t name;
+        std::vector<chain> alternatives;
     };
 
-    Rule* add_rule(Rule r) {
-        rules.push_front(r);
-        grammar.push_back(&rules.front());
-        return &rules.front();
+    Grammar(const std::vector<Rule>& _rules) : rules{ _rules } {
+        for(auto& r : rules) {
+            name_to_rule[r.name] = &r;
+        }
     }
 
-    std::forward_list<Rule> rules;
-    std::vector<Rule*> grammar;
+    Rule& get_rule(const rule_name_t& name) { return *name_to_rule.at(name); }
+    const Rule& get_rule(const rule_name_t& name) const { return *name_to_rule.at(name); }
+
+    std::vector<Rule> rules;
+    std::unordered_map<rule_name_t, Rule*> name_to_rule;
 };
-} // namespace compiler
 
-namespace parser {
+auto put_tokens_onto_stack(const std::vector<lexer::Token>& ts) {
+    ast_stack_t stack;
+    for(auto it = ts.rbegin(); it != ts.rend(); ++it) {
+        stack.push(it->type);
+    }
+    return stack;
+}
 
-bool match_rule(const compiler::Grammar::Rule* rule, size_t& token_pos, const std::vector<lexer::Token>& tokens,
-                const compiler::Grammar& g) {
-    using namespace lexer;
-    using namespace compiler;
-    using Rule = Grammar::Rule;
-    for(auto& alt : rule->alts) {
-        size_t pos = token_pos;
-        auto token = tokens.at(pos);
-        if(token.type == Token::Type::TERMINATOR) { return true; }
+bool match_rule(const Grammar::Rule& rule, ast_stack_t& stack, program_t& program, const Grammar& grammar) {
+    std::println("trying to match rule {}", rule.name);
+    for(const auto& alt : rule.alternatives) {
         bool match = true;
-        for(auto& r : alt) {
-            if(std::holds_alternative<Token::Type>(r)) {
-                if(std::get<Token::Type>(r) != token.type) {
+        ast_stack_t _stack;
+        for(const auto& l : alt) {
+            {
+                std::string link_name, stack_name;
+                if(std::holds_alternative<lexer::Token::Type>(l)) {
+                    link_name = std::format("{}", lexer::get_token_type_string_name(std::get<lexer::Token::Type>(l)));
+                } else if(std::holds_alternative<rule_name_t>(l)) {
+                    link_name = std::format("{}", std::get<rule_name_t>(l));
+                }
+                if(std::holds_alternative<lexer::Token::Type>(stack.top())) {
+                    stack_name =
+                        std::format("{}", lexer::get_token_type_string_name(std::get<lexer::Token::Type>(stack.top())));
+                } else if(std::holds_alternative<rule_name_t>(stack.top())) {
+                    stack_name = std::format("{}", std::get<rule_name_t>(stack.top()));
+                }
+                std::println("Matching link {} against {}", link_name, stack_name);
+            }
+
+            if(std::holds_alternative<lexer::Token::Type>(l)) {
+                if(!std::holds_alternative<lexer::Token::Type>(stack.top()) ||
+                   std::get<lexer::Token::Type>(stack.top()) != std::get<lexer::Token::Type>(l)) {
                     match = false;
                     break;
                 }
-                ++pos;
-            } else if(std::holds_alternative<Rule*>(r)) {
-                if(!match_rule(std::get<Rule*>(r), pos, tokens, g)) {
+            } else if(std::holds_alternative<rule_name_t>(l)) {
+                if(std::holds_alternative<rule_name_t>(stack.top()) &&
+                   std::get<rule_name_t>(l) != std::get<rule_name_t>(stack.top())) {
                     match = false;
                     break;
-                }
-            } else if(std::holds_alternative<Grammar::self_t>(r)) {
-                if(!match_rule(rule, pos, tokens, g)) {
+                } else if(std::holds_alternative<lexer::Token::Type>(stack.top()) &&
+                          !match_rule(grammar.get_rule(std::get<rule_name_t>(l)), stack, program, grammar)) {
                     match = false;
                     break;
+                } else if(!std::holds_alternative<rule_name_t>(stack.top()) &&
+                          !std::holds_alternative<lexer::Token::Type>(stack.top())) {
+                    assert(false);
                 }
             } else {
                 assert(false);
             }
-            token = tokens.at(pos);
+            _stack.push(stack.top());
+            stack.pop();
         }
         if(match) {
-            token_pos = pos;
+            if(std::holds_alternative<lexer::Token::Type>(stack.top()) &&
+               std::get<lexer::Token::Type>(stack.top()) == lexer::Token::Type::TERMINATOR) {
+                stack.pop();
+                program.push_back(rule.name);
+            } else {
+                stack.push(rule.name);
+            }
+            return true;
+        } else {
+            for(auto i = 0; i < _stack.size(); ++i) {
+                stack.push(_stack.top());
+                _stack.pop();
+            }
         }
-        pos = token_pos;
     }
+    return false;
 }
 
-struct Statement {};
-
-class AST {
-  public:
-    std::vector<Statement> statements;
-};
-
-auto build_ast(const std::vector<lexer::Token>& tokens, const compiler::Grammar& g) {
-    // AST ast;
-    // size_t position = 0;
-
-    //// Assuming assignment_expression is the top-level rule
-    // while(position < tokens.size()) {
-    //     if(match_rule(g.grammar.back(), tokens, position, g)) {
-    //         // Matched a statement, now create an AST node for it
-    //         Statement statement; // Replace with actual AST node creation logic
-    //         ast.statements.push_back(statement);
-    //     } else {
-    //         // Error handling: No matching rule found
-    //         std::cerr << "Error: Unexpected token at position " << position << std::endl;
-    //         break; // Or handle the error in a more sophisticated way
-    //     }
-    // }
-
-    // return ast;
+auto parse(const std::vector<lexer::Token>& ts, const Grammar& g) {
+    program_t program;
+    auto stack = put_tokens_onto_stack(ts);
+    while(stack.size() > 1) {
+        for(const auto& r : g.rules) {
+            if(match_rule(r, stack, program, g)) { break; }
+        }
+    }
+    return program;
 }
 
-} // namespace parser
+}; // namespace compiler
 
 int main() {
     using namespace lexer;
     using namespace compiler;
-    using Rule = Grammar::Rule;
 
-    Grammar g;
-    auto primary_expression =
-        g.add_rule(Rule{ .name = "primary_expression", .alts = { { Token::Type::INDENTIFIER }, { Token::Type::INT } } });
-    auto postfix_expression = g.add_rule(Rule{
-        .name = "postfix_expression ", .alts = { { Token::Type::INDENTIFIER }, { Grammar::self, Token::Type::INC } } });
-    auto unary_operator = g.add_rule(Rule{ .name = "unary_operator ",
-                                           .alts = {
-                                               { Token::Type::MINUS },
-                                           } });
-    auto unary_expression = g.add_rule(Rule{ .name = "unary_expression ",
-                                             .alts = {
-                                                 { postfix_expression },
-                                                 { Token::Type::INC, Grammar::self },
-                                                 { unary_operator, Grammar::self },
-                                             } });
-    auto assignment_expression = g.add_rule(Rule{ .name = "assignment_expression ",
-                                                  .alts = {
-                                                      { unary_expression },
-                                                      { unary_expression, Token::Type::EQUALS, Grammar::self },
-                                                  } });
+    Grammar g{ {
+        Grammar::Rule{ .name = "primary_expression",
+                       .alternatives = { {
+                           { Token::Type::INDENTIFIER },
+                       } } },
+        Grammar::Rule{ .name = "postfix_expression",
+                       .alternatives = { {
+                           { "primary_expression" },
+                           { "postfix_expression", Token::Type::INC },
+                       } } },
+        Grammar::Rule{ .name = "unary_operator",
+                       .alternatives = { {
+                           { Token::Type::MINUS },
+                       } } },
+        Grammar::Rule{ .name = "unary_expression",
+                       .alternatives = { {
+                           { "postfix_expression" },
+                           { "unary_operator", "unary_expression" },
+                       } } },
+    } };
+    // auto assignment_expression = g.add_rule(Rule{ .name = "assignment_expression ",
+    //                                               .alts = {
+    //                                                   { unary_expression },
+    //                                                   { unary_expression, Token::Type::EQUALS, Grammar::self },
+
     auto s = lexer::tokenize(read());
-    std::vector<bool> results;
-    for(auto i = 0; i < g.grammar.size(); ++i) {
-        auto& r = g.grammar.at(i);
-        size_t pos = 0;
-        results.push_back(parser::match_rule(r, pos, s, g));
-    }
+    auto ast = compiler::parse(s, g);
 
     for(auto& e : s) {
         std::println("[{}]\t{}: {}", lexer::get_token_category_string_name(e.category),
