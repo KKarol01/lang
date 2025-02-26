@@ -235,6 +235,60 @@ auto put_tokens_onto_stack(const std::vector<lexer::Token>& ts) {
     return stack;
 }
 
+bool match_rule2(const Grammar::Rule& rule, ast_stack_t& stack, program_t& program, const Grammar& grammar, int recursion_level);
+
+bool match_rule_base(ast_stack_t& stack, program_t& program, const Grammar& grammar, int recursion_level) {
+    for(const auto& r : grammar.rules) {
+        if(match_rule2(r, stack, program, grammar, recursion_level)) { return true; }
+    }
+    return false;
+}
+
+auto is_token(const ast_node_t& n) { return std::holds_alternative<lexer::Token::Type>(n); }
+auto is_rule(const ast_node_t& n) { return std::holds_alternative<rule_name_t>(n); }
+
+bool match_rule2(const Grammar::Rule& rule, ast_stack_t& stack, program_t& program, const Grammar& grammar, int recursion_level) {
+    bool matched_any_link = false;
+    bool ret = false;
+    for(const auto& chain : rule.alternatives) {
+        bool matched_chain = true;
+        ast_stack_t _stack;
+        for(const auto& link : chain) {
+            if(is_token(link)) {
+                if(!is_token(stack.top()) || std::get<lexer::Token::Type>(link) != std::get<lexer::Token::Type>(stack.top())) {
+                    matched_chain = false;
+                }
+            } else if(is_rule(link)) {
+                if(!is_rule(stack.top()) || std::get<rule_name_t>(link) != std::get<rule_name_t>(stack.top())) {
+                    matched_chain = false;
+                }
+            }
+            if(!matched_chain) { break; }
+            _stack.push(stack.top());
+            stack.pop();
+            match_rule_base(stack, program, grammar, recursion_level + 1);
+        }
+        if(matched_chain) {
+            ret = true;
+            if(recursion_level == 0 && stack.size() > 0 && is_token(stack.top()) &&
+               std::get<lexer::Token::Type>(stack.top()) == lexer::Token::Type::TERMINATOR) {
+                stack.pop();
+                program.push_back(rule.name);
+            } else {
+                stack.push(rule.name);
+            }
+            // return true;
+        } else {
+            for(auto i = 0; i < _stack.size(); ++i) {
+                stack.push(_stack.top());
+                _stack.pop();
+            }
+            // return false;
+        }
+    }
+    return ret;
+}
+
 bool match_rule(const Grammar::Rule& rule, ast_stack_t& stack, program_t& program, const Grammar& grammar, int recursion_level) {
     std::println("trying to match rule {}", rule.name);
     bool matched_anything = false;
@@ -322,14 +376,7 @@ auto parse(const std::vector<lexer::Token>& ts, const Grammar& g) {
     program_t program;
     auto stack = put_tokens_onto_stack(ts);
     while(stack.size() > 1) {
-        bool matched = false;
-        for(const auto& r : g.rules) {
-            if(match_rule(r, stack, program, g, 0)) {
-                matched = true;
-                break;
-            }
-        }
-        //assert(matched && "No grammar rules understand this!");
+        match_rule_base(stack, program, g, 0);
     }
     return program;
 }
