@@ -209,7 +209,7 @@ auto tokenize(std::string_view code) {
 namespace compiler {
 
 using rule_name_t = std::string;
-using ast_node_t = std::variant<lexer::Token, rule_name_t, lexer::Token::Type>;
+using ast_node_t = std::variant<rule_name_t, lexer::Token::Type>;
 using ast_stack_t = std::stack<ast_node_t>;
 using program_t = std::vector<rule_name_t>;
 
@@ -233,39 +233,40 @@ struct AST {
 };
 
 Expression* add_ast_node(const rule_name_t& name, ast_stack_t& stack, AST& ast) {
-    auto* expr = ast.make_expr();
-    if(name == PRIMARY_EXPRESSION_NAME) {
-        assert(stack.size() == 1 && std::holds_alternative<lexer::Token>(stack.top()));
-        expr->token = std::get<lexer::Token>(stack.top());
-        stack.pop();
-        expr->left = ast.root;
-    } else if(name == POSTFIX_EXPRESSION_NAME) {
-        stack.pop();
-        expr->left = ast.root;
-        assert(stack.size() == 0 || (stack.size() == 1 && std::holds_alternative<lexer::Token>(stack.top())));
-        if(!stack.empty()) {
-            auto* inc_tok = ast.make_expr();
-            inc_tok->token = std::get<lexer::Token>(stack.top());
-            stack.pop();
-            expr->right = inc_tok;
-        }
-    } else if(name == UNARY_OPERATOR_NAME) {
-        assert(false);
-    } else if(name == UNARY_EXPRESSION_NAME) {
-        expr->right = ast.root;
-        assert(stack.size() == 0 || (stack.size() == 1 && std::holds_alternative<rule_name_t>(stack.top())));
-        if(!stack.empty()) {
-            auto* postfix_expr = ast.make_expr();
-            postfix_expr->token = std::get<lexer::Token>(stack.top());
-            stack.pop();
-            expr->left = postfix_expr;
-        }
-        stack.pop();
-    } else {
-        assert(false);
-        return nullptr;
-    }
-    ast.root = expr;
+    //auto* expr = ast.make_expr();
+    //if(name == PRIMARY_EXPRESSION_NAME) {
+    //    assert(stack.size() == 1 && std::holds_alternative<lexer::Token>(stack.top()));
+    //    expr->token = std::get<lexer::Token>(stack.top());
+    //    stack.pop();
+    //    expr->left = ast.root;
+    //} else if(name == POSTFIX_EXPRESSION_NAME) {
+    //    stack.pop();
+    //    expr->left = ast.root;
+    //    assert(stack.size() == 0 || (stack.size() == 1 && std::holds_alternative<lexer::Token>(stack.top())));
+    //    if(!stack.empty()) {
+    //        auto* inc_tok = ast.make_expr();
+    //        inc_tok->token = std::get<lexer::Token>(stack.top());
+    //        stack.pop();
+    //        expr->right = inc_tok;
+    //    }
+    //} else if(name == UNARY_OPERATOR_NAME) {
+    //    assert(false);
+    //} else if(name == UNARY_EXPRESSION_NAME) {
+    //    expr->right = ast.root;
+    //    assert(stack.size() == 0 || (stack.size() == 1 && std::holds_alternative<rule_name_t>(stack.top())));
+    //    if(!stack.empty()) {
+    //        auto* postfix_expr = ast.make_expr();
+    //        postfix_expr->token = std::get<lexer::Token>(stack.top());
+    //        stack.pop();
+    //        expr->left = postfix_expr;
+    //    }
+    //    stack.pop();
+    //} else {
+    //    assert(false);
+    //    return nullptr;
+    //}
+    //ast.root = expr;
+    return nullptr;
 }
 
 class Grammar {
@@ -326,7 +327,7 @@ void match_rule2(const Grammar::Rule& rule, ast_stack_t& stack, program_t& progr
         if(matched_chain) {
             modified_stack = true;
             if(recursion_level == 0 && stack.size() > 0 && is_token(stack.top()) &&
-               std::get<lexer::Token>(stack.top()).type == lexer::Token::Type::TERMINATOR) {
+               std::get<lexer::Token::Type>(stack.top()) == lexer::Token::Type::TERMINATOR) {
                 stack.pop();
                 program.push_back(rule.name);
             } else {
