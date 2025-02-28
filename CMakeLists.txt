@@ -10,3 +10,9 @@ add_custom_command(TARGET main POST_BUILD
 		"$<TARGET_FILE_DIR:parser>"
 		"$<TARGET_FILE_DIR:main>"
 )
+
+add_custom_command(TARGET main POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${CMAKE_SOURCE_DIR}/assets/script.lang"
+		"$<TARGET_FILE_DIR:main>/script.lang"
+)
