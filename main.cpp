@@ -236,10 +236,12 @@ struct AST {
 
 Expression* add_ast_node(const rule_name_t& name, parse_stack_t& stack, AST& ast) {
     auto* e = ast.make_expr();
+    e->token.value = name;
     if(name == "primary_expression") {
         assert(std::holds_alternative<lexer::Token>(stack.top()));
-        e->left = ast.root;
-        e->token = std::get<lexer::Token>(stack.top());
+        e->left = ast.make_expr();
+        e->left->left = ast.root;
+        e->left->token = std::get<lexer::Token>(stack.top());
     } else if(name == "postfix_expression") {
         assert(stack.size() > 0 && stack.size() <= 2);
         e->left = ast.root;
@@ -247,6 +249,17 @@ Expression* add_ast_node(const rule_name_t& name, parse_stack_t& stack, AST& ast
             assert(std::holds_alternative<lexer::Token>(stack.top()));
             e->right = ast.make_expr();
             e->right->token = std::get<lexer::Token>(stack.top());
+            stack.pop();
+        }
+    } else if(name == "unary_expression") {
+        assert(stack.size() > 0 && stack.size() <= 2);
+        e->left = ast.root;
+        if(stack.size() == 2) {
+            stack.pop();
+            assert(std::holds_alternative<lexer::Token>(stack.top()));
+            e->right = e->left;
+            e->left = ast.make_expr();
+            e->left->token = std::get<lexer::Token>(stack.top());
         }
     } else {
         assert(false && "Unrecognized rule name");
@@ -372,6 +385,11 @@ int main() {
                               .alternatives = { {
                                   { "primary_expression" },
                                   { "postfix_expression", Token{ .type = Token::Type::INC } },
+                              } } });
+    g.add_rule(Grammar::Rule{ .name = "unary_expression",
+                              .alternatives = { {
+                                  { "postfix_expression" },
+                                  { Token{ .type = Token::Type::INC }, "unary_expression" },
                               } } });
 
     AST ast;
