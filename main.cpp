@@ -228,6 +228,7 @@ struct AST {
     // probably should make overloads for rule_name to set for .value, and for token, to set it holistically.
     ast_node_t make_expr() { return &expressions.emplace_back(); }
     void add_ast_node(const rule_name_t& name, parse_stack_t& stack) {
+        return;
         assert(stack.size() > 0 && stack.size() <= 2);
         auto* e = make_expr();
         e->token.value = name;
@@ -369,6 +370,53 @@ auto parse(const std::vector<lexer::Token>& ts, const Grammar& g) {
     return program;
 }
 
+auto find_matching_rules(const parse_node_t& node, const Program& p) {
+    std::vector<const Grammar::Rule*> matching_rules;
+    for(auto& r : p.grammar.rules) {
+        for(auto& a : p.grammar.get_rule(r).alternatives) {
+            if(compare_parse_nodes(a.at(0), node)) {
+                matching_rules.push_back(&p.grammar.get_rule(r));
+                break;
+            }
+        }
+    }
+    return matching_rules;
+}
+
+void try_match2(parse_stack_t& stack, const Program& p);
+
+const Grammar::Rule* try_match_rule(std::vector<const Grammar::Rule*> rules, parse_stack_t& stack, const Program& p) {
+    for(auto& r : rules) {
+        for(auto& c : r->alternatives) {
+            parse_stack_t match_stack;
+            for(auto& l : c) {
+                if(compare_parse_nodes(l, stack.top())) {
+                    match_stack.push(stack.top());
+                    stack.pop();
+                } else {
+                    while(!match_stack.empty()) {
+                        stack.push(match_stack.top());
+                        match_stack.pop();
+                    }
+                    break;
+                }
+                try_match2(stack, p);
+            }
+            if(!match_stack.empty()) { return r; }
+        }
+    }
+    return nullptr;
+}
+
+void try_match2(parse_stack_t& stack, const Program& p) {
+    auto matching = find_matching_rules(stack.top(), p);
+    auto* matched = try_match_rule(matching, stack, p);
+    if(matched) {
+        stack.push(matched->name);
+        try_match2(stack, p);
+    }
+}
+
 void print_ast(const parser::Expression* node, int indent = 0) {
     if(node == nullptr) { return; }
 
@@ -422,9 +470,11 @@ int main() {
     }
     std::println("");
 
-    auto program = parser::parse(s, g);
+    // auto program = parser::parse(s, g);
+    auto token_stack = parser::put_tokens_onto_parse_stack(s);
+    parser::try_match2(token_stack, Program{ .grammar = g });
     std::println("Abstract syntax tree: ");
-    for(const auto& node : program.statements) {
+    /*for(const auto& node : program.statements) {
         print_ast(node);
-    }
+    }*/
 }
