@@ -11,7 +11,7 @@ add_custom_command(TARGET main POST_BUILD
 		"$<TARGET_FILE_DIR:main>"
 )
 
-add_custom_command(TARGET main POST_BUILD
+add_custom_target(copy_script ALL
 	COMMAND ${CMAKE_COMMAND} -E copy_if_different
 		"${CMAKE_SOURCE_DIR}/assets/script.lang"
 		"$<TARGET_FILE_DIR:main>/script.lang"

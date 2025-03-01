@@ -225,8 +225,10 @@ using ast_node_t = Expression*;
 using ast_stack_t = std::stack<ast_node_t>;
 
 struct AST {
+    // probably should make overloads for rule_name to set for .value, and for token, to set it holistically.
     ast_node_t make_expr() { return &expressions.emplace_back(); }
     void add_ast_node(const rule_name_t& name, parse_stack_t& stack) {
+        assert(stack.size() > 0 && stack.size() <= 2);
         auto* e = make_expr();
         e->token.value = name;
         if(name == "primary_expression") {
@@ -235,7 +237,6 @@ struct AST {
             e->left->left = root;
             e->left->token = std::get<lexer::Token>(stack.top());
         } else if(name == "postfix_expression") {
-            assert(stack.size() > 0 && stack.size() <= 2);
             e->left = root;
             if(stack.size() == 2) {
                 assert(std::holds_alternative<lexer::Token>(stack.top()));
@@ -244,7 +245,6 @@ struct AST {
                 stack.pop();
             }
         } else if(name == "unary_expression") {
-            assert(stack.size() > 0 && stack.size() <= 2);
             e->left = root;
             if(stack.size() == 2) {
                 stack.pop();
@@ -253,8 +253,15 @@ struct AST {
                 e->left = make_expr();
                 e->left->token = std::get<lexer::Token>(stack.top());
             }
+        } else if(name == "assignment_expression") {
+            assert(stack.size() == 1 || stack.size() == 3);
+            e->left = root;
+            if(stack.size() == 3) {}
         } else {
-            assert(false && "Unrecognized rule name");
+            std::println("[WARNING]: Unrecognized rule name {}", name);
+            assert(false);
+            expressions.pop_back();
+            return;
         }
         root = e;
     }
@@ -382,7 +389,11 @@ int main() {
     Grammar g;
     g.add_rule(Grammar::Rule{ .name = "primary_expression",
                               .alternatives = { {
-                                  { Token{ .type = Token::Type::INDENTIFIER } },
+                                  // todo: without explicit Rule::chain here, some default constructor
+                                  // makes it one alternative with two links in a chain, instead of
+                                  // of two alternatives with one link in chains
+                                  Grammar::Rule::chain{ { Token{ .type = Token::Type::INDENTIFIER } } },
+                                  Grammar::Rule::chain{ { Token{ .type = Token::Type::INT } } },
                               } } })
         .add_rule(Grammar::Rule{ .name = "postfix_expression",
                                  .alternatives = { {
@@ -393,6 +404,11 @@ int main() {
                                  .alternatives = { {
                                      { "postfix_expression" },
                                      { Token{ .type = Token::Type::INC }, "unary_expression" },
+                                 } } })
+        .add_rule(Grammar::Rule{ .name = "assignment_expression",
+                                 .alternatives = { {
+                                     { "unary_expression" },
+                                     { "assignment_expression", Token{ .type = Token::Type::EQUALS }, "assignment_expression" },
                                  } } });
 
     auto source_code = read();
