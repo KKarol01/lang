@@ -1,4 +1,18 @@
-a++ = --++----a;
-a = 1;
-a = ++b;
-a = ++b + 1 * --a;
+a = c = ++b + 1 * --++--a / d++;
+
+= (EQUALS | ASSIGN)
+  = (EQUALS | ASSIGN)
+    a (INDENTIFIER | PRIMARY)
+    c (INDENTIFIER | PRIMARY)
+  + (PLUS | ADD)
+    ++ (INC | UNARY)
+      b (INDENTIFIER | PRIMARY)
+    / (DIV | MUL)
+      * (MUL | MUL)
+        1 (INT | PRIMARY)
+        -- (DEC | UNARY)
+          ++ (INC | UNARY)
+            -- (DEC | UNARY)
+              a (INDENTIFIER | PRIMARY)
+      ++ (INC | POSTFIX)
+        d (INDENTIFIER | PRIMARY)

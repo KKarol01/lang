@@ -55,7 +55,7 @@ struct Token {
         EQUALS,
         MINUS,
         PLUS,
-        MULT,
+        MUL,
         DIV,
 
         BREAK,
@@ -72,50 +72,48 @@ struct Token {
     Category m_category{ Category::NONE };
 };
 
-static constexpr const char* token_type_string_names[]{
+static constexpr const char* TOKEN_NAMES[]{
     "NONE", "TERMINATOR", "INDENTIFIER", "INT",  "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-    "DEC",  "EQUALS",     "MINUS",       "PLUS", "MULT",   "DIV",    "BREAK",
+    "DEC",  "EQUALS",     "MINUS",       "PLUS", "MUL",    "DIV",    "BREAK",
 };
-static constexpr const char* token_category_string_names[]{
+static constexpr const char* TOKEN_CAT_NAMES[]{
     "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
 };
 
-const char* get_token_type_string_name(Token::Type type) { return token_type_string_names[std::to_underlying(type)]; }
-const char* get_token_category_string_name(Token::Category type) {
-    return token_category_string_names[std::to_underlying(type)];
-}
+const char* get_token_type_name(Token::Type type) { return TOKEN_NAMES[std::to_underlying(type)]; }
+const char* get_token_category_string_name(Token::Category type) { return TOKEN_CAT_NAMES[std::to_underlying(type)]; }
 
-static constexpr const char* operators[]{ "+=", "++", "--", "=", "-", "+", "*", "/" };
-static constexpr Token::Type operator_types[]{
-    Token::Type::PLUS_EQUALS, Token::Type::INC,  Token::Type::DEC,  Token::Type::EQUALS,
-    Token::Type::MINUS,       Token::Type::PLUS, Token::Type::MULT, Token::Type::DIV,
+static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/" };
+static constexpr Token::Type OPERATOR_TYPES[]{
+    Token::Type::PLUS_EQUALS, Token::Type::INC,  Token::Type::DEC, Token::Type::EQUALS,
+    Token::Type::MINUS,       Token::Type::PLUS, Token::Type::MUL, Token::Type::DIV,
 };
-static constexpr uint32_t num_operators = sizeof(operators) / sizeof(operators[0]);
+static constexpr uint32_t NUM_OPERATORS = sizeof(OPERATORS) / sizeof(OPERATORS[0]);
 
-static constexpr const char* keywords[]{
+static constexpr const char* KEYWORDS[]{
     "break",
 };
-static constexpr Token::Type keyword_types[]{
+static constexpr Token::Type KEYWORD_TYPES[]{
     Token::Type::BREAK,
 };
-static constexpr uint32_t num_keywords = sizeof(keywords) / sizeof(keywords[0]);
+static constexpr uint32_t NUM_KEYWORDS = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
 
 auto is_white_space(char c) { return c == ' ' || c == '\n'; }
 
 auto is_operator(std::string_view value) {
-    return std::find(&operators[0], &operators[0] + num_operators, value) != &operators[0] + num_operators;
+    return std::find(&OPERATORS[0], &OPERATORS[0] + NUM_OPERATORS, value) != &OPERATORS[0] + NUM_OPERATORS;
 }
 
 auto get_operator_type(std::string_view op) {
-    for(auto i = 0; i < num_operators; ++i) {
-        if(op.compare(operators[i]) == 0) { return operator_types[i]; }
+    for(auto i = 0; i < NUM_OPERATORS; ++i) {
+        if(op.compare(OPERATORS[i]) == 0) { return OPERATOR_TYPES[i]; }
     }
     return Token::Type::NONE;
 }
 
 auto get_keyword_type(std::string_view value) {
-    for(auto i = 0; i < num_keywords; ++i) {
-        if(value.compare(keywords[i]) == 0) { return keyword_types[i]; }
+    for(auto i = 0; i < NUM_KEYWORDS; ++i) {
+        if(value.compare(KEYWORDS[i]) == 0) { return KEYWORD_TYPES[i]; }
     }
     return Token::Type::NONE;
 }
@@ -204,7 +202,6 @@ auto tokenize(std::string_view code) {
 
 namespace parser {
 
-using rule_name_t = std::string;
 using parse_node_t = lexer::Token;
 using parse_stack_t = std::stack<parse_node_t>;
 
@@ -213,10 +210,20 @@ using parse_expr_t = Expression*;
 using program_t = std::vector<parse_expr_t>;
 
 struct Expression {
-    parse_node_t token;
-    parse_expr_t left{};
-    parse_expr_t right{};
+    enum class Type { NONE, PRIMARY, POSTFIX, UNARY, MUL, ADD, ASSIGN };
+    Type m_type;
+    parse_node_t m_node;
+    parse_expr_t m_left{};
+    parse_expr_t m_right{};
 };
+
+static constexpr const char* EXPR_NAMES[]{
+    "NONE", "PRIMARY", "POSTFIX", "UNARY", "MUL", "ADD", "ASSIGN",
+};
+static constexpr uint32_t NUM_EXPRS = sizeof(EXPR_NAMES) / sizeof(EXPR_NAMES[0]);
+
+// todo: move this to utils
+auto get_expr_name(Expression::Type type) { return EXPR_NAMES[std::to_underlying(type)]; }
 
 class Parser {
   public:
@@ -229,14 +236,14 @@ class Parser {
         m_program.clear();
         while(!m_stack.empty()) {
             m_program.push_back(parse_statement());
-            assert(get().m_type == lexer::Token::Type::TERMINATOR);
+            assert(get().m_type == parse_node_t::Type::TERMINATOR);
             m_stack.pop();
         }
         return m_program;
     }
 
   private:
-    void put_tokens_onto_parse_stack(const std::vector<lexer::Token>& tokens) {
+    void put_tokens_onto_parse_stack(const std::vector<parse_node_t>& tokens) {
         for(auto it = tokens.rbegin(); it != tokens.rend(); ++it) {
             m_stack.push(*it);
         }
@@ -249,21 +256,20 @@ class Parser {
         return top;
     }
     parse_expr_t make_expr() { return &m_ast.emplace_back(); }
-    parse_expr_t make_expr(const lexer::Token& tok) { return &m_ast.emplace_back(Expression{ .token = tok }); }
     parse_expr_t make_expr(const Expression& expr) { return &m_ast.emplace_back(expr); }
 
     parse_expr_t parse_prim_expr() {
         auto t = get();
-        assert(t.m_type == lexer::Token::Type::IDENTIFIER || t.m_type == lexer::Token::Type::INT);
+        assert(t.m_type == parse_node_t::Type::IDENTIFIER || t.m_type == parse_node_t::Type::INT);
         m_stack.pop();
-        return make_expr(t);
+        return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = t });
     }
 
     parse_expr_t parse_post_expr() {
         auto left = parse_prim_expr();
-        while(get().m_value == "++" || get().m_value == "--") {
-            auto op = take().m_value;
-            left = make_expr(Expression{ .token = op, .left = left });
+        while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC) {
+            auto node = take();
+            left = make_expr(Expression{ .m_type = Expression::Type::POSTFIX, .m_node = node, .m_left = left });
         }
         return left;
     }
@@ -271,14 +277,14 @@ class Parser {
     parse_expr_t parse_unar_expr() {
         parse_expr_t left{ nullptr };
         parse_expr_t* next{ nullptr };
-        while(get().m_value == "++" || get().m_value == "--") {
-            auto op = take().m_value;
+        while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC) {
+            auto node = take();
             if(!next) {
-                left = make_expr(Expression{ .token = op });
-                next = &left->left;
+                left = make_expr(Expression{ .m_type = Expression::Type::UNARY, .m_node = node });
+                next = &left->m_left;
             } else {
-                *next = make_expr(Expression{ .token = op });
-                next = &((*next)->left);
+                *next = make_expr(Expression{ .m_type = Expression::Type::UNARY, .m_node = node });
+                next = &((*next)->m_left);
             }
         }
         if(next) {
@@ -291,30 +297,30 @@ class Parser {
 
     parse_expr_t parse_mul_expr() {
         auto left = parse_unar_expr();
-        while(get().m_value == "/" || get().m_value == "*") {
-            auto op = take().m_value;
+        while(get().m_type == parse_node_t::Type::MUL || get().m_type == parse_node_t::Type::DIV) {
+            auto node = take();
             auto right = parse_unar_expr();
-            left = make_expr(Expression{ .token = op, .left = left, .right = right });
+            left = make_expr(Expression{ .m_type = Expression::Type::MUL, .m_node = node, .m_left = left, .m_right = right });
         }
         return left;
     }
 
     parse_expr_t parse_add_expr() {
         auto left = parse_mul_expr();
-        while(get().m_value == "+" || get().m_value == "-") {
-            auto op = take().m_value;
+        while(get().m_type == parse_node_t::Type::PLUS || get().m_type == parse_node_t::Type::MINUS) {
+            auto node = take();
             auto right = parse_mul_expr();
-            left = make_expr(Expression{ .token = op, .left = left, .right = right });
+            left = make_expr(Expression{ .m_type = Expression::Type::ADD, .m_node = node, .m_left = left, .m_right = right });
         }
         return left;
     }
 
     parse_expr_t parse_assign_expr() {
         auto left = parse_add_expr();
-        while(get().m_value == "=") {
-            auto op = take().m_value;
+        while(get().m_type == parse_node_t::Type::EQUALS) {
+            auto node = take();
             auto right = parse_add_expr();
-            left = make_expr(Expression{ .token = op, .left = left, .right = right });
+            left = make_expr(Expression{ .m_type = Expression::Type::ASSIGN, .m_node = node, .m_left = left, .m_right = right });
         }
         return left;
     }
@@ -334,10 +340,11 @@ void print_ast(const parser::parse_expr_t node, int indent = 0) {
     for(int i = 0; i < indent; ++i) {
         std::cout << "  ";
     }
-    std::cout << node->token.m_value << " (" << lexer::get_token_type_string_name(node->token.m_type) << ")\n";
+    std::println("{} ({} | {})", node->m_node.m_value, lexer::get_token_type_name(node->m_node.m_type),
+                 parser::get_expr_name(node->m_type));
 
-    print_ast(node->left, indent + 1);
-    print_ast(node->right, indent + 1);
+    print_ast(node->m_left, indent + 1);
+    print_ast(node->m_right, indent + 1);
 }
 }; // namespace parser
 
