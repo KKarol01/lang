@@ -4,7 +4,7 @@
 #include <sstream>
 #include "parser.hpp"
 
-auto read() {
+auto read_source_code() {
 	std::ifstream file{"script.lang"};
 	if(!file.is_open()) {return std::string{};}
 	file.seekg(0, std::ios::end);
@@ -16,7 +16,7 @@ auto read() {
 }
 
 void a() {
-	auto text = read();
+	auto text = read_source_code();
 	std::stringstream ss{text};
 	std::string read;
 	while(ss >> read) {
