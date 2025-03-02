@@ -259,11 +259,41 @@ class Parser {
         return make_expr(t);
     }
 
-    parse_expr_t parse_mul_expr() {
+    parse_expr_t parse_post_expr() {
         auto left = parse_prim_expr();
+        while(get().m_value == "++" || get().m_value == "--") {
+            auto op = take().m_value;
+            left = make_expr(Expression{ .token = op, .left = left });
+        }
+        return left;
+    }
+
+    parse_expr_t parse_unar_expr() {
+        parse_expr_t left{ nullptr };
+        parse_expr_t* next{ nullptr };
+        while(get().m_value == "++" || get().m_value == "--") {
+            auto op = take().m_value;
+            if(!next) {
+                left = make_expr(Expression{ .token = op });
+                next = &left->left;
+            } else {
+                *next = make_expr(Expression{ .token = op });
+                next = &((*next)->left);
+            }
+        }
+        if(next) {
+            *next = parse_post_expr();
+        } else {
+            left = parse_post_expr();
+        }
+        return left;
+    }
+
+    parse_expr_t parse_mul_expr() {
+        auto left = parse_unar_expr();
         while(get().m_value == "/" || get().m_value == "*") {
             auto op = take().m_value;
-            auto right = parse_prim_expr();
+            auto right = parse_unar_expr();
             left = make_expr(Expression{ .token = op, .left = left, .right = right });
         }
         return left;
