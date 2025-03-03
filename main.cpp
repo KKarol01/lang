@@ -57,8 +57,12 @@ struct Token {
         PLUS,
         MULT,
         DIV,
+        PAR_OPEN,
+        PAR_CLOSE,
+        COMMA,
 
         BREAK,
+        FUNC,
     };
 
     auto is_empty() const { return m_type == Type::NONE; }
@@ -73,8 +77,8 @@ struct Token {
 };
 
 static constexpr const char* token_type_string_names[]{
-    "NONE", "TERMINATOR", "INDENTIFIER", "INT",  "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-    "DEC",  "EQUALS",     "MINUS",       "PLUS", "MULT",   "DIV",    "BREAK",
+    "NONE",  "TERMINATOR", "INDENTIFIER", "INT", "DOUBLE",   "STRING",    "PLUS_EQUALS", "INC",   "DEC",  "EQUALS",
+    "MINUS", "PLUS",       "MULT",        "DIV", "PAR_OPEN", "PAR_CLOSE", "COMMA",       "BREAK", "FUNC",
 };
 static constexpr const char* token_category_string_names[]{
     "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
@@ -85,18 +89,18 @@ const char* get_token_category_string_name(Token::Category type) {
     return token_category_string_names[std::to_underlying(type)];
 }
 
-static constexpr const char* operators[]{ "+=", "++", "--", "=", "-", "+", "*", "/" };
+static constexpr const char* operators[]{ "+=", "++", "--", "=", "-", "+", "*", "/", "(", ")", "," };
 static constexpr Token::Type operator_types[]{
-    Token::Type::PLUS_EQUALS, Token::Type::INC,  Token::Type::DEC,  Token::Type::EQUALS,
-    Token::Type::MINUS,       Token::Type::PLUS, Token::Type::MULT, Token::Type::DIV,
+    Token::Type::PLUS_EQUALS, Token::Type::INC,       Token::Type::DEC,   Token::Type::EQUALS,
+    Token::Type::MINUS,       Token::Type::PLUS,      Token::Type::MULT,  Token::Type::DIV,
+    Token::Type::PAR_OPEN,    Token::Type::PAR_CLOSE, Token::Type::COMMA,
 };
 static constexpr uint32_t num_operators = sizeof(operators) / sizeof(operators[0]);
 
-static constexpr const char* keywords[]{
-    "break",
-};
+static constexpr const char* keywords[]{ "break", "func" };
 static constexpr Token::Type keyword_types[]{
     Token::Type::BREAK,
+    Token::Type::FUNC,
 };
 static constexpr uint32_t num_keywords = sizeof(keywords) / sizeof(keywords[0]);
 
@@ -254,16 +258,40 @@ class Parser {
 
     parse_expr_t parse_prim_expr() {
         auto t = get();
-        assert(t.m_type == lexer::Token::Type::IDENTIFIER || t.m_type == lexer::Token::Type::INT);
+        assert(t.m_type == lexer::Token::Type::IDENTIFIER || t.m_type == lexer::Token::Type::INT ||
+               t.m_type == lexer::Token::Type::FUNC);
         m_stack.pop();
         return make_expr(t);
     }
 
-    parse_expr_t parse_mul_expr() {
+    parse_expr_t parse_expr_list() {
+        auto left = parse_add_expr();
+        while(get().m_value == ",") {
+            auto op = take().m_value;
+            auto right = parse_add_expr();
+            left = make_expr(Expression{ .token = op, .left = left, .right = right });
+        }
+        return left; 
+    }
+
+    parse_expr_t parse_func_def() {
         auto left = parse_prim_expr();
+        if(left->token.m_type != lexer::Token::Type::FUNC) { return left; }
+        auto name = parse_prim_expr();
+        assert(name->token.m_type == lexer::Token::Type::IDENTIFIER);
+        assert(get().m_type == lexer::Token::Type::PAR_OPEN);
+        take();
+        auto list = parse_expr_list();
+        assert(get().m_type == lexer::Token::Type::PAR_CLOSE);
+        take();
+        return make_expr(Expression{ .token = left->token, .left = name, .right = list });
+    }
+
+    parse_expr_t parse_mul_expr() {
+        auto left = parse_func_def();
         while(get().m_value == "/" || get().m_value == "*") {
             auto op = take().m_value;
-            auto right = parse_prim_expr();
+            auto right = parse_func_def();
             left = make_expr(Expression{ .token = op, .left = left, .right = right });
         }
         return left;

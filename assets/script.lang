@@ -1,5 +1,5 @@
 a + 1 + a = a + b * c / d;
-
-a = a * 2;
+funca;
+func a(b, c, d);
 
 b = c;
