@@ -60,6 +60,8 @@ struct Token {
         PAR_OPEN,
         PAR_CLOSE,
         COMMA,
+        BRA_OPEN,
+        BRA_CLOSE,
 
         BREAK,
         FUNC,
@@ -77,8 +79,9 @@ struct Token {
 };
 
 static constexpr const char* TOKEN_NAMES[]{
-    "NONE",  "TERMINATOR", "INDENTIFIER", "INT", "DOUBLE",   "STRING",    "PLUS_EQUALS", "INC",   "DEC",  "EQUALS",
-    "MINUS", "PLUS",       "MUL",         "DIV", "PAR_OPEN", "PAR_CLOSE", "COMMA",       "BREAK", "FUNC",
+    "NONE",     "TERMINATOR", "INDENTIFIER", "INT",      "DOUBLE",    "STRING", "PLUS_EQUALS",
+    "INC",      "DEC",        "EQUALS",      "MINUS",    "PLUS",      "MUL",    "DIV",
+    "PAR_OPEN", "PAR_CLOSE",  "COMMA",       "BRA_OPEN", "BRA_CLOSE", "BREAK",  "FUNC",
 };
 static constexpr const char* TOKEN_CAT_NAMES[]{
     "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
@@ -87,11 +90,12 @@ static constexpr const char* TOKEN_CAT_NAMES[]{
 const char* get_token_type_name(Token::Type type) { return TOKEN_NAMES[std::to_underlying(type)]; }
 const char* get_token_category_string_name(Token::Category type) { return TOKEN_CAT_NAMES[std::to_underlying(type)]; }
 
-static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/", "(", ")", "," };
+static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/", "(", ")", ",", "{", "}" };
 static constexpr Token::Type OPERATOR_TYPES[]{
     Token::Type::PLUS_EQUALS, Token::Type::INC,       Token::Type::DEC,   Token::Type::EQUALS,
     Token::Type::MINUS,       Token::Type::PLUS,      Token::Type::MUL,   Token::Type::DIV,
-    Token::Type::PAR_OPEN,    Token::Type::PAR_CLOSE, Token::Type::COMMA,
+    Token::Type::PAR_OPEN,    Token::Type::PAR_CLOSE, Token::Type::COMMA, Token::Type::BRA_OPEN,
+    Token::Type::BRA_CLOSE,
 };
 static constexpr uint32_t NUM_OPERATORS = sizeof(OPERATORS) / sizeof(OPERATORS[0]);
 
@@ -105,7 +109,7 @@ static constexpr Token::Type KEYWORD_TYPES[]{
 };
 static constexpr uint32_t NUM_KEYWORDS = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
 
-auto is_white_space(char c) { return c == ' ' || c == '\n'; }
+auto is_white_space(char c) { return c == ' ' || c == '\t' || c == '\n'; }
 
 auto is_operator(std::string_view value) {
     return std::find(&OPERATORS[0], &OPERATORS[0] + NUM_OPERATORS, value) != &OPERATORS[0] + NUM_OPERATORS;
@@ -226,6 +230,7 @@ struct Expression {
         ADD,
         ASSIGN,
         FUNC_DECL,
+        FUNC_CALL,
         EXPR_LIST,
     };
     Type m_type;
@@ -234,8 +239,8 @@ struct Expression {
     parse_expr_t m_right{};
 };
 
-static constexpr const char* EXPR_NAMES[]{ "NONE", "PRIMARY", "POSTFIX",   "UNARY",    "MUL",
-                                           "ADD",  "ASSIGN",  "FUNC_DECL", "EXPR_LIST" };
+static constexpr const char* EXPR_NAMES[]{ "NONE", "PRIMARY", "POSTFIX",   "UNARY",     "MUL",
+                                           "ADD",  "ASSIGN",  "FUNC_DECL", "FUNC_CALL", "EXPR_LIST" };
 static constexpr uint32_t NUM_EXPRS = sizeof(EXPR_NAMES) / sizeof(EXPR_NAMES[0]);
 
 // todo: move this to utils
@@ -252,8 +257,6 @@ class Parser {
         m_program.clear();
         while(!m_stack.empty()) {
             m_program.push_back(parse_statement());
-            assert(get().m_type == parse_node_t::Type::TERMINATOR);
-            m_stack.pop();
         }
         return m_program;
     }
@@ -282,26 +285,43 @@ class Parser {
         return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = node });
     }
 
-    parse_expr_t parse_func_decl() {
+    parse_expr_t parse_func_expr() {
         if(get().m_type != parse_node_t::Type::FUNC) { return parse_prim_expr(); }
-        auto left = parse_prim_expr();
+        auto func = parse_prim_expr();
         assert(get().m_type == parse_node_t::Type::IDENTIFIER);
         auto name = parse_prim_expr();
         assert(take().m_type == parse_node_t::Type::PAR_OPEN);
-        parse_expr_t param_list{};
+        parse_expr_t func_params{};
         if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
-            param_list = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
+            func_params = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
         } else {
-            param_list = parse_expr_list();
+            func_params = parse_expr_list();
         }
         assert(take().m_type == parse_node_t::Type::PAR_CLOSE);
-        left = make_expr(Expression{
-            .m_type = Expression::Type::FUNC_DECL, .m_node = name->m_node, .m_left = param_list, .m_right = nullptr });
-        return left;
+        func = make_expr(Expression{
+            .m_type = Expression::Type::FUNC_DECL, .m_node = name->m_node, .m_left = func_params, .m_right = nullptr });
+
+        if(get().m_type != parse_node_t::Type::BRA_OPEN) {
+            func->m_type = Expression::Type::FUNC_CALL;
+            return func;
+        }
+        take();
+        auto func_body = parse_statement();
+        while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
+            auto right = parse_statement();
+            func_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = func_body, .m_right = right });
+        }
+        take();
+        func->m_left = func_params;
+        func->m_right = func_body;
+        // parse_statement requires semicolon at the end
+        m_stack.push(parse_node_t{
+            .m_value = ";", .m_type = lexer::Token::Type::TERMINATOR, .m_category = lexer::Token::Category::TERMINATOR });
+        return func;
     }
 
     parse_expr_t parse_post_expr() {
-        auto left = parse_func_decl();
+        auto left = parse_func_expr();
         while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC) {
             auto node = take();
             left = make_expr(Expression{ .m_type = Expression::Type::POSTFIX, .m_node = node, .m_left = left });
@@ -372,7 +392,12 @@ class Parser {
         return left;
     }
 
-    parse_expr_t parse_statement() { return parse_expr(); }
+    parse_expr_t parse_statement() {
+        auto list = parse_expr_list();
+        assert(get().m_type == parse_node_t::Type::TERMINATOR);
+        take();
+        return list;
+    }
 
     program_t m_program;
     parse_stack_t m_stack;

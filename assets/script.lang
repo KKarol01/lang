@@ -1,1 +1,14 @@
-func a(a, b, c, d);
+a = 1;
+b = 2;
+
+func f1() {
+	x = d;
+	a;
+	a = 1;
+	b = 2 * 15;
+}
+func f2(a, b) {
+	a = b * 20 = c;
+}
+
+c = 1 * 20 + a / d;
