@@ -57,8 +57,12 @@ struct Token {
         PLUS,
         MUL,
         DIV,
+        PAR_OPEN,
+        PAR_CLOSE,
+        COMMA,
 
         BREAK,
+        FUNC,
     };
 
     auto is_empty() const { return m_type == Type::NONE; }
@@ -73,8 +77,8 @@ struct Token {
 };
 
 static constexpr const char* TOKEN_NAMES[]{
-    "NONE", "TERMINATOR", "INDENTIFIER", "INT",  "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-    "DEC",  "EQUALS",     "MINUS",       "PLUS", "MUL",    "DIV",    "BREAK",
+    "NONE",  "TERMINATOR", "INDENTIFIER", "INT", "DOUBLE",   "STRING",    "PLUS_EQUALS", "INC",   "DEC",  "EQUALS",
+    "MINUS", "PLUS",       "MUL",         "DIV", "PAR_OPEN", "PAR_CLOSE", "COMMA",       "BREAK", "FUNC",
 };
 static constexpr const char* TOKEN_CAT_NAMES[]{
     "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
@@ -83,18 +87,21 @@ static constexpr const char* TOKEN_CAT_NAMES[]{
 const char* get_token_type_name(Token::Type type) { return TOKEN_NAMES[std::to_underlying(type)]; }
 const char* get_token_category_string_name(Token::Category type) { return TOKEN_CAT_NAMES[std::to_underlying(type)]; }
 
-static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/" };
+static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/", "(", ")", "," };
 static constexpr Token::Type OPERATOR_TYPES[]{
-    Token::Type::PLUS_EQUALS, Token::Type::INC,  Token::Type::DEC, Token::Type::EQUALS,
-    Token::Type::MINUS,       Token::Type::PLUS, Token::Type::MUL, Token::Type::DIV,
+    Token::Type::PLUS_EQUALS, Token::Type::INC,       Token::Type::DEC,   Token::Type::EQUALS,
+    Token::Type::MINUS,       Token::Type::PLUS,      Token::Type::MUL,   Token::Type::DIV,
+    Token::Type::PAR_OPEN,    Token::Type::PAR_CLOSE, Token::Type::COMMA,
 };
 static constexpr uint32_t NUM_OPERATORS = sizeof(OPERATORS) / sizeof(OPERATORS[0]);
 
 static constexpr const char* KEYWORDS[]{
     "break",
+    "func",
 };
 static constexpr Token::Type KEYWORD_TYPES[]{
     Token::Type::BREAK,
+    Token::Type::FUNC,
 };
 static constexpr uint32_t NUM_KEYWORDS = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
 
@@ -210,16 +217,25 @@ using parse_expr_t = Expression*;
 using program_t = std::vector<parse_expr_t>;
 
 struct Expression {
-    enum class Type { NONE, PRIMARY, POSTFIX, UNARY, MUL, ADD, ASSIGN };
+    enum class Type {
+        NONE,
+        PRIMARY,
+        POSTFIX,
+        UNARY,
+        MUL,
+        ADD,
+        ASSIGN,
+        FUNC_DECL,
+        EXPR_LIST,
+    };
     Type m_type;
     parse_node_t m_node;
     parse_expr_t m_left{};
     parse_expr_t m_right{};
 };
 
-static constexpr const char* EXPR_NAMES[]{
-    "NONE", "PRIMARY", "POSTFIX", "UNARY", "MUL", "ADD", "ASSIGN",
-};
+static constexpr const char* EXPR_NAMES[]{ "NONE", "PRIMARY", "POSTFIX",   "UNARY",    "MUL",
+                                           "ADD",  "ASSIGN",  "FUNC_DECL", "EXPR_LIST" };
 static constexpr uint32_t NUM_EXPRS = sizeof(EXPR_NAMES) / sizeof(EXPR_NAMES[0]);
 
 // todo: move this to utils
@@ -259,14 +275,33 @@ class Parser {
     parse_expr_t make_expr(const Expression& expr) { return &m_ast.emplace_back(expr); }
 
     parse_expr_t parse_prim_expr() {
-        auto t = get();
-        assert(t.m_type == parse_node_t::Type::IDENTIFIER || t.m_type == parse_node_t::Type::INT);
+        auto node = get();
+        assert(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
+               node.m_type == parse_node_t::Type::FUNC);
         m_stack.pop();
-        return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = t });
+        return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = node });
+    }
+
+    parse_expr_t parse_func_decl() {
+        if(get().m_type != parse_node_t::Type::FUNC) { return parse_prim_expr(); }
+        auto left = parse_prim_expr();
+        assert(get().m_type == parse_node_t::Type::IDENTIFIER);
+        auto name = parse_prim_expr();
+        assert(take().m_type == parse_node_t::Type::PAR_OPEN);
+        parse_expr_t param_list{};
+        if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
+            param_list = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
+        } else {
+            param_list = parse_expr_list();
+        }
+        assert(take().m_type == parse_node_t::Type::PAR_CLOSE);
+        left = make_expr(Expression{
+            .m_type = Expression::Type::FUNC_DECL, .m_node = name->m_node, .m_left = param_list, .m_right = nullptr });
+        return left;
     }
 
     parse_expr_t parse_post_expr() {
-        auto left = parse_prim_expr();
+        auto left = parse_func_decl();
         while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC) {
             auto node = take();
             left = make_expr(Expression{ .m_type = Expression::Type::POSTFIX, .m_node = node, .m_left = left });
@@ -326,6 +361,16 @@ class Parser {
     }
 
     parse_expr_t parse_expr() { return parse_assign_expr(); }
+
+    parse_expr_t parse_expr_list() {
+        auto left = parse_expr();
+        while(get().m_type == parse_node_t::Type::COMMA) {
+            auto node = take();
+            auto right = parse_expr();
+            left = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_node = node, .m_left = left, .m_right = right });
+        }
+        return left;
+    }
 
     parse_expr_t parse_statement() { return parse_expr(); }
 
