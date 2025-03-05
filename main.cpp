@@ -268,6 +268,13 @@ class Parser {
         }
     }
 
+    // some functions use so as to not force the user to write semicolons after
+    // for example brackets: func f1() {}; or if statements.
+    void insert_terminator() {
+        m_stack.push(parse_node_t{
+            .m_value = ";", .m_type = lexer::Token::Type::TERMINATOR, .m_category = lexer::Token::Category::TERMINATOR });
+    }
+
     parse_node_t& get() { return m_stack.top(); }
     parse_node_t take() {
         auto top = m_stack.top();
@@ -286,38 +293,73 @@ class Parser {
     }
 
     parse_expr_t parse_func_expr() {
-        if(get().m_type != parse_node_t::Type::FUNC) { return parse_prim_expr(); }
-        auto func = parse_prim_expr();
-        assert(get().m_type == parse_node_t::Type::IDENTIFIER);
-        auto name = parse_prim_expr();
-        assert(take().m_type == parse_node_t::Type::PAR_OPEN);
-        parse_expr_t func_params{};
-        if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
-            func_params = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
+        parse_expr_t func_kw = parse_prim_expr();
+        parse_expr_t func_name{};
+        parse_expr_t func_param_list{};
+        parse_expr_t func_body{};
+        if(func_kw->m_node.m_type == parse_node_t::Type::FUNC) {
+            assert(get().m_type == parse_node_t::Type::IDENTIFIER);
+            func_name = parse_prim_expr();
+        } else if(func_kw->m_node.m_type == parse_node_t::Type::IDENTIFIER && get().m_type == parse_node_t::Type::PAR_OPEN) {
+            func_name = func_kw;
         } else {
-            func_params = parse_expr_list();
+            return func_kw;
         }
-        assert(take().m_type == parse_node_t::Type::PAR_CLOSE);
-        func = make_expr(Expression{
-            .m_type = Expression::Type::FUNC_DECL, .m_node = name->m_node, .m_left = func_params, .m_right = nullptr });
 
-        if(get().m_type != parse_node_t::Type::BRA_OPEN) {
-            func->m_type = Expression::Type::FUNC_CALL;
-            return func;
+        assert(take().m_type == parse_node_t::Type::PAR_OPEN);
+        if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
+            func_param_list = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
+        } else {
+            func_param_list = parse_expr_list();
         }
+        assert(get().m_type == parse_node_t::Type::PAR_CLOSE);
         take();
-        auto func_body = parse_statement();
-        while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
-            auto right = parse_statement();
-            func_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = func_body, .m_right = right });
+
+        parse_expr_t func_expr{};
+        if(get().m_type == parse_node_t::Type::BRA_OPEN) {
+            take();
+            func_body = parse_statement();
+            while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
+                auto right = parse_statement();
+                func_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = func_body, .m_right = right });
+            }
+            take();
+            func_expr = make_expr(Expression{
+                .m_type = Expression::Type::FUNC_DECL, .m_node = func_name->m_node, .m_left = func_param_list, .m_right = func_body });
+            insert_terminator();
+        } else {
+            func_expr = make_expr(Expression{ .m_type = Expression::Type::FUNC_CALL, .m_node = func_name->m_node, .m_left = func_param_list });
         }
-        take();
-        func->m_left = func_params;
-        func->m_right = func_body;
-        // parse_statement requires semicolon at the end
-        m_stack.push(parse_node_t{
-            .m_value = ";", .m_type = lexer::Token::Type::TERMINATOR, .m_category = lexer::Token::Category::TERMINATOR });
-        return func;
+        return func_expr;
+        // if(get().m_type != parse_node_t::Type::FUNC) { return parse_prim_expr(); }
+        // auto func = parse_prim_expr();
+        // assert(get().m_type == parse_node_t::Type::IDENTIFIER);
+        // auto name = parse_prim_expr();
+        // assert(take().m_type == parse_node_t::Type::PAR_OPEN);
+        // parse_expr_t func_params{};
+        // if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
+        //     func_params = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
+        // } else {
+        //     func_params = parse_expr_list();
+        // }
+        // assert(take().m_type == parse_node_t::Type::PAR_CLOSE);
+        // func = make_expr(Expression{
+        //     .m_type = Expression::Type::FUNC_DECL, .m_node = name->m_node, .m_left = func_params, .m_right = nullptr });
+
+        // if(get().m_type != parse_node_t::Type::BRA_OPEN) {
+        //     func->m_type = Expression::Type::FUNC_CALL;
+        //     return func;
+        // }
+        // take();
+        // auto func_body = parse_statement();
+        // while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
+        //     auto right = parse_statement();
+        //     func_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = func_body, .m_right = right });
+        // }
+        // take();
+        // func->m_left = func_params;
+        // func->m_right = func_body;
+        // return func;
     }
 
     parse_expr_t parse_post_expr() {
