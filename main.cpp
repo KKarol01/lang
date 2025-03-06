@@ -331,35 +331,6 @@ class Parser {
             func_expr = make_expr(Expression{ .m_type = Expression::Type::FUNC_CALL, .m_node = func_name->m_node, .m_left = func_param_list });
         }
         return func_expr;
-        // if(get().m_type != parse_node_t::Type::FUNC) { return parse_prim_expr(); }
-        // auto func = parse_prim_expr();
-        // assert(get().m_type == parse_node_t::Type::IDENTIFIER);
-        // auto name = parse_prim_expr();
-        // assert(take().m_type == parse_node_t::Type::PAR_OPEN);
-        // parse_expr_t func_params{};
-        // if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
-        //     func_params = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
-        // } else {
-        //     func_params = parse_expr_list();
-        // }
-        // assert(take().m_type == parse_node_t::Type::PAR_CLOSE);
-        // func = make_expr(Expression{
-        //     .m_type = Expression::Type::FUNC_DECL, .m_node = name->m_node, .m_left = func_params, .m_right = nullptr });
-
-        // if(get().m_type != parse_node_t::Type::BRA_OPEN) {
-        //     func->m_type = Expression::Type::FUNC_CALL;
-        //     return func;
-        // }
-        // take();
-        // auto func_body = parse_statement();
-        // while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
-        //     auto right = parse_statement();
-        //     func_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = func_body, .m_right = right });
-        // }
-        // take();
-        // func->m_left = func_params;
-        // func->m_right = func_body;
-        // return func;
     }
 
     parse_expr_t parse_post_expr() {
@@ -460,6 +431,100 @@ void print_ast(const parser::parse_expr_t node, int indent = 0) {
 }
 }; // namespace parser
 
+namespace interpreter {
+
+/*  NONE,
+    PRIMARY,
+    POSTFIX,
+    UNARY,
+    MUL,
+    ADD,
+    ASSIGN,
+    FUNC_DECL,
+    FUNC_CALL,
+    EXPR_LIST,*/
+
+class ExecutorAllocator {
+  public:
+    struct StackFrame {
+        std::unordered_map<std::string, void*> m_variables;
+    };
+
+    std::deque<StackFrame> m_stack_frames;
+};
+
+struct ExpressionResult {
+    union {
+        int* m_int;
+        double* m_double;
+        std::string* m_string;
+    };
+    lexer::Token::Type m_type{}; // only variable types allowed and none.
+    bool m_writable{ false };
+};
+
+class Expression {
+  public:
+    Expression(const parser::parse_expr_t expr) : m_expr(expr) {}
+    virtual ~Expression() = default;
+    virtual ExpressionResult eval() = 0;
+
+  protected:
+    const parser::parse_expr_t m_expr{};
+};
+class PrimaryExpression final : public Expression {
+  public:
+    PrimaryExpression(const parser::parse_expr_t expr) : Expression(expr) {}
+    ~PrimaryExpression() final = default;
+    ExpressionResult eval() final {}
+};
+class PostfixExpression : public Expression {
+  public:
+};
+class UnaryExpression : public Expression {
+  public:
+};
+
+class Executor {
+  public:
+    Executor(const parser::program_t& p) : m_program(p) {
+        std::deque<void*> memory;
+        std::unordered_map<std::string, ExpressionResult> stack;
+
+        for(auto& p : m_program) {
+            switch(p->m_type) {
+            case parser::Expression::Type::ASSIGN: {
+                auto l = p->m_left;
+                auto r = p->m_right;
+                switch(r->m_node.m_type) {
+                case lexer::Token::Type::INT: {
+                    memory.push_back(new int{ std::stoi(r->m_node.m_value) });
+                    stack[l->m_node.m_value] =
+                        ExpressionResult{ .m_int = static_cast<int*>(memory.back()), .m_type = r->m_node.m_type };
+                    break;
+                }
+                default: {
+                    assert(false);
+                }
+                }
+                break;
+            }
+            default: {
+                assert(false);
+                break;
+            }
+            }
+        }
+
+        int x = 1;
+    }
+
+  private:
+    parser::program_t m_program;
+    ExecutorAllocator m_alloc;
+};
+} // namespace interpreter
+
 int main() {
     using namespace lexer;
     using namespace parser;
@@ -469,5 +534,5 @@ int main() {
     for(auto& p : program) {
         print_ast(p);
     }
-    int x = 1;
+    interpreter::Executor exec{ program };
 }
