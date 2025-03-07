@@ -8,6 +8,7 @@
 #include <variant>
 #include <string>
 #include <stack>
+#include <any>
 #include <unordered_map>
 #include <parser/parser.hpp>
 
@@ -444,85 +445,109 @@ namespace interpreter {
     FUNC_CALL,
     EXPR_LIST,*/
 
+class Expression;
+using exec_expr_t = std::unique_ptr<Expression>;
+
 class ExecutorAllocator {
   public:
     struct StackFrame {
-        std::unordered_map<std::string, void*> m_variables;
+        std::any& get_allocation(const std::string& var_name) { return m_variables[var_name]; }
+        std::unordered_map<std::string, std::any> m_variables;
     };
+
+    StackFrame& get_top_stack_frame() { return m_stack_frames.front(); }
 
     std::deque<StackFrame> m_stack_frames;
 };
 
 struct ExpressionResult {
-    union {
-        int* m_int;
-        double* m_double;
-        std::string* m_string;
-    };
+    std::any* m_memory;
     lexer::Token::Type m_type{}; // only variable types allowed and none.
     bool m_writable{ false };
 };
 
+class Executor;
+
 class Expression {
   public:
-    Expression(const parser::parse_expr_t expr) : m_expr(expr) {}
+    Expression(Executor* exec, const parser::parse_expr_t expr);
     virtual ~Expression() = default;
-    virtual ExpressionResult eval() = 0;
+    virtual ExpressionResult eval(ExecutorAllocator* alloc) = 0;
 
   protected:
+    exec_expr_t m_left{};
+    exec_expr_t m_right{};
     const parser::parse_expr_t m_expr{};
 };
+
 class PrimaryExpression final : public Expression {
   public:
-    PrimaryExpression(const parser::parse_expr_t expr) : Expression(expr) {}
+    PrimaryExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
     ~PrimaryExpression() final = default;
-    ExpressionResult eval() final {}
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        auto& stack = alloc->get_top_stack_frame();
+        auto& any_alloc = stack.get_allocation(m_expr->m_node.m_value);
+
+        return ExpressionResult{ .m_memory = &any_alloc, .m_type = lexer::Token::Type::IDENTIFIER, .m_writable = true };
+    }
 };
+
 class PostfixExpression : public Expression {
   public:
 };
+
 class UnaryExpression : public Expression {
   public:
+};
+
+class AssignExpression final : public Expression {
+  public:
+    AssignExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~AssignExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        assert(m_left && m_right);
+        return m_left->eval(alloc);
+    }
 };
 
 class Executor {
   public:
     Executor(const parser::program_t& p) : m_program(p) {
-        std::deque<void*> memory;
-        std::unordered_map<std::string, ExpressionResult> stack;
-
+        m_exprs.reserve(m_program.size());
         for(auto& p : m_program) {
-            switch(p->m_type) {
-            case parser::Expression::Type::ASSIGN: {
-                auto l = p->m_left;
-                auto r = p->m_right;
-                switch(r->m_node.m_type) {
-                case lexer::Token::Type::INT: {
-                    memory.push_back(new int{ std::stoi(r->m_node.m_value) });
-                    stack[l->m_node.m_value] =
-                        ExpressionResult{ .m_int = static_cast<int*>(memory.back()), .m_type = r->m_node.m_type };
-                    break;
-                }
-                default: {
-                    assert(false);
-                }
-                }
-                break;
-            }
-            default: {
-                assert(false);
-                break;
-            }
-            }
+            m_exprs.push_back(make_expr(p));
+            m_alloc.m_stack_frames.emplace_front();
+            m_exprs.back()->eval(&m_alloc);
+            m_alloc.m_stack_frames.pop_front();
         }
+    }
 
-        int x = 1;
+    exec_expr_t make_expr(const parser::parse_expr_t expr) {
+        if(!expr) { return nullptr; }
+        switch(expr->m_type) {
+        case parser::Expression::Type::ASSIGN: {
+            return std::make_unique<AssignExpression>(this, expr);
+        }
+        case parser::Expression::Type::PRIMARY: {
+            return std::make_unique<PrimaryExpression>(this, expr);
+        }
+        default: {
+            assert(false);
+        }
+        }
     }
 
   private:
     parser::program_t m_program;
+    std::vector<std::unique_ptr<Expression>> m_exprs;
     ExecutorAllocator m_alloc;
 };
+
+Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr(expr) {
+    m_left = exec->make_expr(expr->m_left);
+    m_right = exec->make_expr(expr->m_right);
+}
+
 } // namespace interpreter
 
 int main() {
