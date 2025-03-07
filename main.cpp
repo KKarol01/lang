@@ -195,11 +195,16 @@ auto tokenize(std::string_view code) {
         token.m_category = deduce_token_category(code.substr(i, 1));
         if(token.m_category == Token::Category::NONE) { continue; }
         for(auto j = 1; j < code.size(); ++j) {
+            if(token.m_category == Token::Category::STRING && code.at(i + j) != '"') { continue; }
             const auto cat = deduce_token_category(code.substr(i + j, 1));
             if((cat != token.m_category && !(token.m_category == Token::Category::UNRESOLVED && cat == Token::Category::NUMBER)) // allows variables with numbers in them
                || (cat == Token::Category::OPERATOR && get_operator_type(code.substr(i, j + 1)) == Token::Type::NONE) // splits operators (they are the same category, but --- should be dec and min)
-            ) {
+               || (token.m_category == Token::Category::STRING && token.m_category == cat)) {
                 token.m_value = code.substr(i, j);
+                if(token.m_category == Token::Category::STRING) {
+                    token.m_value = code.substr(i + 1, j - 1);
+                    ++i;
+                }
                 deduce_token_type(token);
                 tokens.push_back(token);
                 token.clear();
@@ -288,6 +293,7 @@ class Parser {
     parse_expr_t parse_prim_expr() {
         auto node = get();
         assert(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
+               node.m_type == parse_node_t::Type::DOUBLE || node.m_type == parse_node_t::Type::STRING ||
                node.m_type == parse_node_t::Type::FUNC);
         m_stack.pop();
         return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = node });
@@ -447,12 +453,14 @@ namespace interpreter {
 
 class Expression;
 using exec_expr_t = std::unique_ptr<Expression>;
+using literal_t = std::variant<std::monostate, int, double, std::string>;
 
 class ExecutorAllocator {
   public:
     struct StackFrame {
-        std::any& get_allocation(const std::string& var_name) { return m_variables[var_name]; }
-        std::unordered_map<std::string, std::any> m_variables;
+        literal_t& get_allocation(const std::string& var_name) { return m_variables[var_name]; }
+        std::unordered_map<std::string, literal_t> m_variables;
+        // std::stack<literal_t> m_ephemeral; // for literals; basically crude register emulation
     };
 
     StackFrame& get_top_stack_frame() { return m_stack_frames.front(); }
@@ -461,9 +469,9 @@ class ExecutorAllocator {
 };
 
 struct ExpressionResult {
-    std::any* m_memory;
-    lexer::Token::Type m_type{}; // only variable types allowed and none.
-    bool m_writable{ false };
+    // literal_t* on m_type == identifier, literal_t on m_type == int,double,string
+    std::variant<literal_t*, literal_t> m_memory;
+    lexer::Token::Type m_type{};
 };
 
 class Executor;
@@ -475,6 +483,16 @@ class Expression {
     virtual ExpressionResult eval(ExecutorAllocator* alloc) = 0;
 
   protected:
+    void assign(ExpressionResult* left, const ExpressionResult* right) {
+        auto* assigned = std::holds_alternative<literal_t*>(right->m_memory) ? std::get<literal_t*>(right->m_memory)
+                                                                             : &std::get<literal_t>(right->m_memory);
+        if(!std::holds_alternative<literal_t*>(left->m_memory)) {
+            assert(false);
+            return;
+        }
+        *std::get<literal_t*>(left->m_memory) = *assigned;
+    }
+
     exec_expr_t m_left{};
     exec_expr_t m_right{};
     const parser::parse_expr_t m_expr{};
@@ -486,17 +504,31 @@ class PrimaryExpression final : public Expression {
     ~PrimaryExpression() final = default;
     ExpressionResult eval(ExecutorAllocator* alloc) final {
         auto& stack = alloc->get_top_stack_frame();
-        auto& any_alloc = stack.get_allocation(m_expr->m_node.m_value);
-
-        return ExpressionResult{ .m_memory = &any_alloc, .m_type = lexer::Token::Type::IDENTIFIER, .m_writable = true };
+        if(m_expr->m_node.m_type == lexer::Token::Type::IDENTIFIER) {
+            auto& any_alloc = stack.get_allocation(m_expr->m_node.m_value);
+            return ExpressionResult{ .m_memory = &any_alloc, .m_type = lexer::Token::Type::IDENTIFIER };
+        } else {
+            literal_t value;
+            if(m_expr->m_node.m_type == lexer::Token::Type::INT) {
+                value = std::stoi(m_expr->m_node.m_value);
+            } else if(m_expr->m_node.m_type == lexer::Token::Type::DOUBLE) {
+                value = std::stod(m_expr->m_node.m_value);
+            } else if(m_expr->m_node.m_type == lexer::Token::Type::STRING) {
+                value = m_expr->m_node.m_value;
+            } else {
+                assert(false);
+                return ExpressionResult{};
+            }
+            return ExpressionResult{ .m_memory = value, .m_type = m_expr->m_node.m_type };
+        }
     }
 };
 
-class PostfixExpression : public Expression {
+class PostfixExpression final : public Expression {
   public:
 };
 
-class UnaryExpression : public Expression {
+class UnaryExpression final : public Expression {
   public:
 };
 
@@ -505,8 +537,10 @@ class AssignExpression final : public Expression {
     AssignExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
     ~AssignExpression() final = default;
     ExpressionResult eval(ExecutorAllocator* alloc) final {
-        assert(m_left && m_right);
-        return m_left->eval(alloc);
+        auto assignee = m_left->eval(alloc);
+        auto assigned = m_right->eval(alloc);
+        assign(&assignee, &assigned);
+        return assignee;
     }
 };
 
@@ -514,12 +548,25 @@ class Executor {
   public:
     Executor(const parser::program_t& p) : m_program(p) {
         m_exprs.reserve(m_program.size());
+        m_alloc.m_stack_frames.emplace_front();
         for(auto& p : m_program) {
+            if(p->m_type == parser::Expression::Type::FUNC_DECL) { continue; }
             m_exprs.push_back(make_expr(p));
-            m_alloc.m_stack_frames.emplace_front();
             m_exprs.back()->eval(&m_alloc);
-            m_alloc.m_stack_frames.pop_front();
+
+            std::println("[Stack variables]");
+            for(auto& ms : m_alloc.get_top_stack_frame().m_variables) {
+                std::string type_name;
+                if(std::holds_alternative<int>(ms.second)) {
+                    std::println("[{} | {}] : {}", ms.first, "i32", std::get<int>(ms.second));
+                } else if(std::holds_alternative<double>(ms.second)) {
+                    std::println("[{} | {}] : {}", ms.first, "f64", std::get<double>(ms.second));
+                } else if(std::holds_alternative<std::string>(ms.second)) {
+                    std::println("[{} | {}] : {}", ms.first, "str", std::get<std::string>(ms.second));
+                }
+            }
         }
+        m_alloc.m_stack_frames.pop_front();
     }
 
     exec_expr_t make_expr(const parser::parse_expr_t expr) {
