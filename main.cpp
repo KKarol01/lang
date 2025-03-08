@@ -66,6 +66,7 @@ struct Token {
 
         BREAK,
         FUNC,
+        RETURN,
     };
 
     auto is_empty() const { return m_type == Type::NONE; }
@@ -80,9 +81,9 @@ struct Token {
 };
 
 static constexpr const char* TOKEN_NAMES[]{
-    "NONE",     "TERMINATOR", "INDENTIFIER", "INT",      "DOUBLE",    "STRING", "PLUS_EQUALS",
-    "INC",      "DEC",        "EQUALS",      "MINUS",    "PLUS",      "MUL",    "DIV",
-    "PAR_OPEN", "PAR_CLOSE",  "COMMA",       "BRA_OPEN", "BRA_CLOSE", "BREAK",  "FUNC",
+    "NONE",  "TERMINATOR", "INDENTIFIER", "INT",   "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
+    "DEC",   "EQUALS",     "MINUS",       "PLUS",  "MUL",    "DIV",    "PAR_OPEN",    "PAR_CLOSE",
+    "COMMA", "BRA_OPEN",   "BRA_CLOSE",   "BREAK", "FUNC",   "RETURN",
 };
 static constexpr const char* TOKEN_CAT_NAMES[]{
     "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
@@ -103,10 +104,12 @@ static constexpr uint32_t NUM_OPERATORS = sizeof(OPERATORS) / sizeof(OPERATORS[0
 static constexpr const char* KEYWORDS[]{
     "break",
     "func",
+    "return",
 };
 static constexpr Token::Type KEYWORD_TYPES[]{
     Token::Type::BREAK,
     Token::Type::FUNC,
+    Token::Type::RETURN,
 };
 static constexpr uint32_t NUM_KEYWORDS = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
 
@@ -233,11 +236,13 @@ struct Expression {
         POSTFIX,
         UNARY,
         MUL,
+        DIV,
         ADD,
         ASSIGN,
         FUNC_DECL,
         FUNC_CALL,
         EXPR_LIST,
+        RETURN_STMNT,
     };
     Type m_type;
     parse_node_t m_node;
@@ -245,8 +250,10 @@ struct Expression {
     parse_expr_t m_right{};
 };
 
-static constexpr const char* EXPR_NAMES[]{ "NONE", "PRIMARY", "POSTFIX",   "UNARY",     "MUL",
-                                           "ADD",  "ASSIGN",  "FUNC_DECL", "FUNC_CALL", "EXPR_LIST" };
+static constexpr const char* EXPR_NAMES[]{
+    "NONE", "PRIMARY", "POSTFIX",   "UNARY",     "MUL",       "DIV",
+    "ADD",  "ASSIGN",  "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT",
+};
 static constexpr uint32_t NUM_EXPRS = sizeof(EXPR_NAMES) / sizeof(EXPR_NAMES[0]);
 
 // todo: move this to utils
@@ -375,7 +382,10 @@ class Parser {
         while(get().m_type == parse_node_t::Type::MUL || get().m_type == parse_node_t::Type::DIV) {
             auto node = take();
             auto right = parse_unar_expr();
-            left = make_expr(Expression{ .m_type = Expression::Type::MUL, .m_node = node, .m_left = left, .m_right = right });
+            left = make_expr(Expression{ .m_type = node.m_type == lexer::Token::Type::MUL ? Expression::Type::MUL : Expression::Type::DIV,
+                                         .m_node = node,
+                                         .m_left = left,
+                                         .m_right = right });
         }
         return left;
     }
@@ -400,20 +410,29 @@ class Parser {
         return left;
     }
 
-    parse_expr_t parse_expr() { return parse_assign_expr(); }
-
     parse_expr_t parse_expr_list() {
-        auto left = parse_expr();
+        auto left = parse_assign_expr();
         while(get().m_type == parse_node_t::Type::COMMA) {
             auto node = take();
-            auto right = parse_expr();
+            auto right = parse_assign_expr();
             left = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_node = node, .m_left = left, .m_right = right });
         }
         return left;
     }
 
+    parse_expr_t parse_expr() { return parse_expr_list(); }
+
+    parse_expr_t parse_return_statement() {
+        if(get().m_type == lexer::Token::Type::RETURN) {
+            auto ret = take();
+            auto list = parse_expr_list();
+            return make_expr(Expression{ .m_type = Expression::Type::RETURN_STMNT, .m_node = ret, .m_left = list });
+        }
+        return parse_expr_list();
+    }
+
     parse_expr_t parse_statement() {
-        auto list = parse_expr_list();
+        auto list = parse_return_statement();
         assert(get().m_type == parse_node_t::Type::TERMINATOR);
         take();
         return list;
@@ -445,6 +464,7 @@ namespace interpreter {
     POSTFIX,
     UNARY,
     MUL,
+    DIV,
     ADD,
     ASSIGN,
     FUNC_DECL,
@@ -453,11 +473,12 @@ namespace interpreter {
 
 class Expression;
 using exec_expr_t = std::unique_ptr<Expression>;
-using literal_t = std::variant<std::monostate, int, double, std::string>;
+using literal_t = std::variant<int, double, std::string>;
 
 class ExecutorAllocator {
   public:
     struct StackFrame {
+        // this default-constructs the literal_t memory to int 0
         literal_t& get_allocation(const std::string& var_name) { return m_variables[var_name]; }
         std::unordered_map<std::string, literal_t> m_variables;
         // std::stack<literal_t> m_ephemeral; // for literals; basically crude register emulation
@@ -484,14 +505,24 @@ class Expression {
 
   protected:
     void assign(ExpressionResult* left, const ExpressionResult* right) {
-        auto* assigned = std::holds_alternative<literal_t*>(right->m_memory) ? std::get<literal_t*>(right->m_memory)
-                                                                             : &std::get<literal_t>(right->m_memory);
+        auto* assigned = get_pmem(*right);
         if(!std::holds_alternative<literal_t*>(left->m_memory)) {
             assert(false);
             return;
         }
         *std::get<literal_t*>(left->m_memory) = *assigned;
     }
+    literal_t* get_pmem(ExpressionResult& res) {
+        return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
+                                                               : std::get<literal_t*>(res.m_memory);
+    }
+    const literal_t* get_pmem(const ExpressionResult& res) const {
+        return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
+                                                               : std::get<literal_t*>(res.m_memory);
+    }
+    bool is_int(const ExpressionResult& res) const { return std::holds_alternative<int>(*get_pmem(res)); }
+    bool is_double(const ExpressionResult& res) const { return std::holds_alternative<double>(*get_pmem(res)); }
+    bool is_string(const ExpressionResult& res) const { return std::holds_alternative<std::string>(*get_pmem(res)); }
 
     exec_expr_t m_left{};
     exec_expr_t m_right{};
@@ -532,6 +563,78 @@ class UnaryExpression final : public Expression {
   public:
 };
 
+class AddExpression final : public Expression {
+  public:
+    AddExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~AddExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        auto left = m_left->eval(alloc);
+        auto right = m_right->eval(alloc);
+        auto l_mem = get_pmem(left);
+        auto r_mem = get_pmem(right);
+        ExpressionResult res{ .m_type = m_expr->m_node.m_type };
+        if((is_int(left) && is_double(right)) || (is_int(right) && is_double(left)) || (is_double(left) && is_double(right))) {
+            res.m_memory = literal_t{ (double)(is_int(left) ? std::get<int>(*l_mem) : std::get<double>(*l_mem)) +
+                                      (double)(is_int(right) ? std::get<int>(*r_mem) : std::get<double>(*r_mem)) };
+        } else if(is_int(left) && is_int(right)) {
+            res.m_memory = literal_t{ std::get<int>(*l_mem) + std::get<int>(*r_mem) };
+        } else if(is_string(left) && is_string(right)) {
+            res.m_memory = literal_t{ std::get<std::string>(*l_mem) + std::get<std::string>(*r_mem) };
+        } else {
+            assert(false);
+        }
+        return res;
+    }
+};
+
+class MulExpression final : public Expression {
+  public:
+    MulExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~MulExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        auto left = m_left->eval(alloc);
+        auto right = m_right->eval(alloc);
+        auto l_mem = get_pmem(left);
+        auto r_mem = get_pmem(right);
+        ExpressionResult res{ .m_type = m_expr->m_node.m_type };
+        if((is_int(left) && is_double(right)) || (is_int(right) && is_double(left)) || (is_double(left) && is_double(right))) {
+            res.m_memory = literal_t{ (double)(is_int(left) ? std::get<int>(*l_mem) : std::get<double>(*l_mem)) *
+                                      (double)(is_int(right) ? std::get<int>(*r_mem) : std::get<double>(*r_mem)) };
+        } else if(is_int(left) && is_int(right)) {
+            res.m_memory = literal_t{ std::get<int>(*l_mem) * std::get<int>(*r_mem) };
+        } else if(is_string(left) && is_string(right)) {
+            assert(false);
+        } else {
+            assert(false);
+        }
+        return res;
+    }
+};
+
+class DivExpression final : public Expression {
+  public:
+    DivExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~DivExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        auto left = m_left->eval(alloc);
+        auto right = m_right->eval(alloc);
+        auto l_mem = get_pmem(left);
+        auto r_mem = get_pmem(right);
+        ExpressionResult res{ .m_type = m_expr->m_node.m_type };
+        if((is_int(left) && is_double(right)) || (is_int(right) && is_double(left)) || (is_double(left) && is_double(right))) {
+            res.m_memory = literal_t{ (double)(is_int(left) ? std::get<int>(*l_mem) : std::get<double>(*l_mem)) /
+                                      (double)(is_int(right) ? std::get<int>(*r_mem) : std::get<double>(*r_mem)) };
+        } else if(is_int(left) && is_int(right)) {
+            res.m_memory = literal_t{ std::get<int>(*l_mem) / std::get<int>(*r_mem) };
+        } else if(is_string(left) && is_string(right)) {
+            assert(false);
+        } else {
+            assert(false);
+        }
+        return res;
+    }
+};
+
 class AssignExpression final : public Expression {
   public:
     AssignExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
@@ -544,15 +647,45 @@ class AssignExpression final : public Expression {
     }
 };
 
+class FuncDeclExpression final : public Expression {
+  public:
+    FuncDeclExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~FuncDeclExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        assert(false);
+        return ExpressionResult{};
+    }
+};
+
+class ExprListExpression final : public Expression {
+  public:
+    ExprListExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~ExprListExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        m_left->eval(alloc);
+        return m_right->eval(alloc);
+    }
+};
+
+class ReturnStmntExpression final : public Expression {
+  public:
+    ReturnStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~ReturnStmntExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final { return m_right->eval(alloc); }
+};
+
 class Executor {
   public:
     Executor(const parser::program_t& p) : m_program(p) {
         m_exprs.reserve(m_program.size());
         m_alloc.m_stack_frames.emplace_front();
         for(auto& p : m_program) {
-            if(p->m_type == parser::Expression::Type::FUNC_DECL) { continue; }
-            m_exprs.push_back(make_expr(p));
-            m_exprs.back()->eval(&m_alloc);
+            if(p->m_type == parser::Expression::Type::FUNC_DECL) {
+                m_func_decls[p->m_node.m_value] = make_expr(p);
+            } else {
+                m_exprs.push_back(make_expr(p));
+                m_exprs.back()->eval(&m_alloc);
+            }
 
             std::println("[Stack variables]");
             for(auto& ms : m_alloc.get_top_stack_frame().m_variables) {
@@ -578,6 +711,24 @@ class Executor {
         case parser::Expression::Type::PRIMARY: {
             return std::make_unique<PrimaryExpression>(this, expr);
         }
+        case parser::Expression::Type::FUNC_DECL: {
+            return std::make_unique<FuncDeclExpression>(this, expr);
+        }
+        case parser::Expression::Type::EXPR_LIST: {
+            return std::make_unique<ExprListExpression>(this, expr);
+        }
+        case parser::Expression::Type::ADD: {
+            return std::make_unique<AddExpression>(this, expr);
+        }
+        case parser::Expression::Type::MUL: {
+            return std::make_unique<MulExpression>(this, expr);
+        }
+        case parser::Expression::Type::DIV: {
+            return std::make_unique<DivExpression>(this, expr);
+        }
+        case parser::Expression::Type::RETURN_STMNT: {
+            return std::make_unique<ReturnStmntExpression>(this, expr);
+        }
         default: {
             assert(false);
         }
@@ -587,6 +738,7 @@ class Executor {
   private:
     parser::program_t m_program;
     std::vector<std::unique_ptr<Expression>> m_exprs;
+    std::unordered_map<std::string, std::unique_ptr<Expression>> m_func_decls;
     ExecutorAllocator m_alloc;
 };
 
