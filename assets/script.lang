@@ -1,1 +1,7 @@
-b = 2.0 + a, b = "a";
+func f1(a, b, c) {
+	return a, a*b, a/c;
+}
+
+c = 15;
+d = 9.0;
+j, k, l = f1(c, d, 3.51);

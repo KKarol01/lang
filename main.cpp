@@ -4,6 +4,7 @@
 #include <string_view>
 #include <cassert>
 #include <deque>
+#include <queue>
 #include <print>
 #include <variant>
 #include <string>
@@ -54,7 +55,7 @@ struct Token {
         INC,
         DEC,
         EQUALS,
-        MINUS,
+        MIN,
         PLUS,
         MUL,
         DIV,
@@ -82,7 +83,7 @@ struct Token {
 
 static constexpr const char* TOKEN_NAMES[]{
     "NONE",  "TERMINATOR", "INDENTIFIER", "INT",   "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-    "DEC",   "EQUALS",     "MINUS",       "PLUS",  "MUL",    "DIV",    "PAR_OPEN",    "PAR_CLOSE",
+    "DEC",   "EQUALS",     "MIN",         "PLUS",  "MUL",    "DIV",    "PAR_OPEN",    "PAR_CLOSE",
     "COMMA", "BRA_OPEN",   "BRA_CLOSE",   "BREAK", "FUNC",   "RETURN",
 };
 static constexpr const char* TOKEN_CAT_NAMES[]{
@@ -95,7 +96,7 @@ const char* get_token_category_string_name(Token::Category type) { return TOKEN_
 static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/", "(", ")", ",", "{", "}" };
 static constexpr Token::Type OPERATOR_TYPES[]{
     Token::Type::PLUS_EQUALS, Token::Type::INC,       Token::Type::DEC,   Token::Type::EQUALS,
-    Token::Type::MINUS,       Token::Type::PLUS,      Token::Type::MUL,   Token::Type::DIV,
+    Token::Type::MIN,         Token::Type::PLUS,      Token::Type::MUL,   Token::Type::DIV,
     Token::Type::PAR_OPEN,    Token::Type::PAR_CLOSE, Token::Type::COMMA, Token::Type::BRA_OPEN,
     Token::Type::BRA_CLOSE,
 };
@@ -235,6 +236,7 @@ struct Expression {
         PRIMARY,
         POSTFIX,
         UNARY,
+        MIN,
         MUL,
         DIV,
         ADD,
@@ -251,7 +253,7 @@ struct Expression {
 };
 
 static constexpr const char* EXPR_NAMES[]{
-    "NONE", "PRIMARY", "POSTFIX",   "UNARY",     "MUL",       "DIV",
+    "NONE", "PRIMARY", "POSTFIX",   "UNARY",     "MIN",       "MUL",          "DIV",
     "ADD",  "ASSIGN",  "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT",
 };
 static constexpr uint32_t NUM_EXPRS = sizeof(EXPR_NAMES) / sizeof(EXPR_NAMES[0]);
@@ -359,7 +361,8 @@ class Parser {
     parse_expr_t parse_unar_expr() {
         parse_expr_t left{ nullptr };
         parse_expr_t* next{ nullptr };
-        while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC) {
+        while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC ||
+              get().m_type == parse_node_t::Type::MIN) {
             auto node = take();
             if(!next) {
                 left = make_expr(Expression{ .m_type = Expression::Type::UNARY, .m_node = node });
@@ -392,7 +395,7 @@ class Parser {
 
     parse_expr_t parse_add_expr() {
         auto left = parse_mul_expr();
-        while(get().m_type == parse_node_t::Type::PLUS || get().m_type == parse_node_t::Type::MINUS) {
+        while(get().m_type == parse_node_t::Type::PLUS || get().m_type == parse_node_t::Type::MIN) {
             auto node = take();
             auto right = parse_mul_expr();
             left = make_expr(Expression{ .m_type = Expression::Type::ADD, .m_node = node, .m_left = left, .m_right = right });
@@ -463,6 +466,7 @@ namespace interpreter {
     PRIMARY,
     POSTFIX,
     UNARY,
+    MIN,
     MUL,
     DIV,
     ADD,
@@ -473,38 +477,77 @@ namespace interpreter {
 
 class Expression;
 using exec_expr_t = std::unique_ptr<Expression>;
-using literal_t = std::variant<int, double, std::string>;
+using literal_t = std::variant<std::monostate, int, double, std::string>;
+
+class Executor;
 
 class ExecutorAllocator {
   public:
     struct StackFrame {
-        // this default-constructs the literal_t memory to int 0
-        literal_t& get_allocation(const std::string& var_name) { return m_variables[var_name]; }
+        literal_t& get_allocation(const std::string& var_name) {
+            auto ret = m_variables.insert({ var_name, {} });
+            if(ret.second) { m_variable_creation_order.push_back(var_name); }
+            return ret.first->second;
+        }
+        std::deque<std::string> m_variable_creation_order;
         std::unordered_map<std::string, literal_t> m_variables;
         // std::stack<literal_t> m_ephemeral; // for literals; basically crude register emulation
     };
 
+    ExecutorAllocator(Executor* exec) : m_executor(exec) {}
+
     StackFrame& get_top_stack_frame() { return m_stack_frames.front(); }
 
+    Executor* m_executor{};
     std::deque<StackFrame> m_stack_frames;
 };
 
 struct ExpressionResult {
+    using memory_t = std::variant<literal_t*, literal_t>;
     // literal_t* on m_type == identifier, literal_t on m_type == int,double,string
-    std::variant<literal_t*, literal_t> m_memory;
+    memory_t m_memory;
+    std::vector<literal_t> m_return_values;
     lexer::Token::Type m_type{};
 };
 
-class Executor;
+class Executor {
+  public:
+    Executor(const parser::program_t& p);
+
+    exec_expr_t make_expr(const parser::parse_expr_t expr);
+    Expression* get_func_decl(const std::string& name);
+
+  private:
+    parser::program_t m_program;
+    std::vector<std::unique_ptr<Expression>> m_exprs;
+    std::unordered_map<std::string, std::unique_ptr<Expression>> m_func_decls;
+    ExecutorAllocator m_alloc;
+};
 
 class Expression {
+    friend class FuncCallExpression;
+    friend class ReturnStmntExpression;
+
   public:
     Expression(Executor* exec, const parser::parse_expr_t expr);
     virtual ~Expression() = default;
     virtual ExpressionResult eval(ExecutorAllocator* alloc) = 0;
 
   protected:
-    void assign(ExpressionResult* left, const ExpressionResult* right) {
+    void assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc) {
+        if(!right->m_return_values.empty()) {
+            auto& top = alloc->get_top_stack_frame();
+            assert(top.m_variable_creation_order.size() >= right->m_return_values.size());
+            auto stack_it = top.m_variable_creation_order.end();
+            auto vec_it = right->m_return_values.end();
+            for(auto i = 0; i < right->m_return_values.size(); ++i) {
+                auto& alloc = top.get_allocation(*--stack_it);
+                assert(std::holds_alternative<std::monostate>(alloc)); // othwerise: func returns too many values. TODO: check if func returns too few.
+                alloc = *--vec_it;
+            }
+            return;
+        }
+
         auto* assigned = get_pmem(*right);
         if(!std::holds_alternative<literal_t*>(left->m_memory)) {
             assert(false);
@@ -561,6 +604,24 @@ class PostfixExpression final : public Expression {
 
 class UnaryExpression final : public Expression {
   public:
+    UnaryExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~UnaryExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        auto left = m_left->eval(alloc);
+        ExpressionResult res{ .m_type = m_expr->m_node.m_type };
+        if(!(is_int(left) || is_double(left))) {
+            assert(false);
+            return {};
+        }
+        if(m_expr->m_node.m_type == lexer::Token::Type::MIN) {
+            res.m_memory = literal_t{ -(is_int(left) ? std::get<int>(*get_pmem(left)) : std::get<double>(*get_pmem(left))) };
+        } else if(m_expr->m_node.m_type == lexer::Token::Type::DEC) {
+            res.m_memory = literal_t{ (is_int(left) ? --std::get<int>(*get_pmem(left)) : --std::get<double>(*get_pmem(left))) };
+        } else if(m_expr->m_node.m_type == lexer::Token::Type::INC) {
+            res.m_memory = literal_t{ (is_int(left) ? ++std::get<int>(*get_pmem(left)) : ++std::get<double>(*get_pmem(left))) };
+        }
+        return res;
+    }
 };
 
 class AddExpression final : public Expression {
@@ -642,7 +703,7 @@ class AssignExpression final : public Expression {
     ExpressionResult eval(ExecutorAllocator* alloc) final {
         auto assignee = m_left->eval(alloc);
         auto assigned = m_right->eval(alloc);
-        assign(&assignee, &assigned);
+        assign(&assignee, &assigned, alloc);
         return assignee;
     }
 };
@@ -671,81 +732,160 @@ class ReturnStmntExpression final : public Expression {
   public:
     ReturnStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
     ~ReturnStmntExpression() final = default;
-    ExpressionResult eval(ExecutorAllocator* alloc) final { return m_right->eval(alloc); }
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        std::vector<literal_t> results;
+        std::stack<Expression*> expr_list_stack;
+        expr_list_stack.push(&*m_left);
+        while(!expr_list_stack.empty()) {
+            auto expr = expr_list_stack.top();
+            expr_list_stack.pop();
+            results.push_back(*get_pmem(expr->m_right->eval(alloc)));
+            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
+                expr_list_stack.push(&*expr->m_left);
+            } else {
+                results.push_back(*get_pmem(expr->m_left->eval(alloc)));
+            }
+        }
+        return ExpressionResult{ .m_return_values = { results.rbegin(), results.rend() }, .m_type = m_expr->m_node.m_type };
+    }
 };
 
-class Executor {
+class FuncCallExpression final : public Expression {
   public:
-    Executor(const parser::program_t& p) : m_program(p) {
-        m_exprs.reserve(m_program.size());
-        m_alloc.m_stack_frames.emplace_front();
-        for(auto& p : m_program) {
-            if(p->m_type == parser::Expression::Type::FUNC_DECL) {
-                m_func_decls[p->m_node.m_value] = make_expr(p);
-            } else {
-                m_exprs.push_back(make_expr(p));
-                m_exprs.back()->eval(&m_alloc);
-            }
-
-            std::println("[Stack variables]");
-            for(auto& ms : m_alloc.get_top_stack_frame().m_variables) {
-                std::string type_name;
-                if(std::holds_alternative<int>(ms.second)) {
-                    std::println("[{} | {}] : {}", ms.first, "i32", std::get<int>(ms.second));
-                } else if(std::holds_alternative<double>(ms.second)) {
-                    std::println("[{} | {}] : {}", ms.first, "f64", std::get<double>(ms.second));
-                } else if(std::holds_alternative<std::string>(ms.second)) {
-                    std::println("[{} | {}] : {}", ms.first, "str", std::get<std::string>(ms.second));
-                }
-            }
-        }
-        m_alloc.m_stack_frames.pop_front();
-    }
-
-    exec_expr_t make_expr(const parser::parse_expr_t expr) {
-        if(!expr) { return nullptr; }
-        switch(expr->m_type) {
-        case parser::Expression::Type::ASSIGN: {
-            return std::make_unique<AssignExpression>(this, expr);
-        }
-        case parser::Expression::Type::PRIMARY: {
-            return std::make_unique<PrimaryExpression>(this, expr);
-        }
-        case parser::Expression::Type::FUNC_DECL: {
-            return std::make_unique<FuncDeclExpression>(this, expr);
-        }
-        case parser::Expression::Type::EXPR_LIST: {
-            return std::make_unique<ExprListExpression>(this, expr);
-        }
-        case parser::Expression::Type::ADD: {
-            return std::make_unique<AddExpression>(this, expr);
-        }
-        case parser::Expression::Type::MUL: {
-            return std::make_unique<MulExpression>(this, expr);
-        }
-        case parser::Expression::Type::DIV: {
-            return std::make_unique<DivExpression>(this, expr);
-        }
-        case parser::Expression::Type::RETURN_STMNT: {
-            return std::make_unique<ReturnStmntExpression>(this, expr);
-        }
-        default: {
-            assert(false);
-        }
-        }
+    FuncCallExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~FuncCallExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final {
+        auto* func_decl = alloc->m_executor->get_func_decl(m_expr->m_node.m_value);
+        transfer_call_args(func_decl, alloc);
+        auto ret_values = func_decl->m_right->eval(alloc);
+        alloc->m_stack_frames.pop_front();
+        return ret_values;
     }
 
   private:
-    parser::program_t m_program;
-    std::vector<std::unique_ptr<Expression>> m_exprs;
-    std::unordered_map<std::string, std::unique_ptr<Expression>> m_func_decls;
-    ExecutorAllocator m_alloc;
+    void transfer_call_args(Expression* func_decl_expr, ExecutorAllocator* alloc) {
+        std::stack<Expression*> expr_list_stack;
+        std::stack<Expression*> param_list_stack;
+        std::queue<std::string> param_list_var_names;
+        expr_list_stack.push(&*m_left);
+        param_list_stack.push(&*func_decl_expr->m_left);
+        while(!param_list_stack.empty()) {
+            auto expr = param_list_stack.top();
+            param_list_stack.pop();
+            if(!expr->m_left && !expr->m_right) { break; }                    // for empty param list
+            if(expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) { // for param list with one param
+                param_list_var_names.push(expr->m_expr->m_node.m_value);
+                break;
+            }
+            if(expr->m_right) { param_list_var_names.push(expr->m_right->m_expr->m_node.m_value); }
+            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
+                param_list_stack.push(&*expr->m_left);
+            } else {
+                param_list_var_names.push(expr->m_left->m_expr->m_node.m_value);
+            }
+        }
+        ExecutorAllocator::StackFrame stack_frame;
+        while(!expr_list_stack.empty()) {
+            auto expr = expr_list_stack.top();
+            expr_list_stack.pop();
+            // if(!expr->m_left && !expr->m_right) { break; }                     // for empty param list
+            // if(expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) { // for param list with one param
+            //     param_list_var_names.push(expr->m_expr->m_node.m_value);
+            //     break;
+            // }
+            if(expr->m_right) {
+                auto& val = *get_pmem(expr->m_right->eval(alloc));
+                stack_frame.get_allocation(param_list_var_names.front()) = val;
+                param_list_var_names.pop();
+            }
+            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
+                expr_list_stack.push(&*expr->m_left);
+            } else {
+                auto& val = *get_pmem(expr->m_left->eval(alloc));
+                stack_frame.get_allocation(param_list_var_names.front()) = val;
+                param_list_var_names.pop();
+            }
+        }
+        alloc->m_stack_frames.push_front(std::move(stack_frame));
+    }
 };
 
 Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr(expr) {
     m_left = exec->make_expr(expr->m_left);
     m_right = exec->make_expr(expr->m_right);
 }
+
+Executor::Executor(const parser::program_t& p) : m_program(p), m_alloc(this) {
+    m_exprs.reserve(m_program.size());
+    m_alloc.m_stack_frames.emplace_front();
+    for(auto& p : m_program) {
+        if(p->m_type == parser::Expression::Type::FUNC_DECL) {
+            m_func_decls[p->m_node.m_value] = make_expr(p);
+        } else {
+            m_exprs.push_back(make_expr(p));
+            m_exprs.back()->eval(&m_alloc);
+        }
+
+        std::println("[Stack variables]");
+        for(auto& ms : m_alloc.get_top_stack_frame().m_variables) {
+            std::string type_name;
+            if(std::holds_alternative<int>(ms.second)) {
+                std::println("[{} | {}] : {}", ms.first, "i32", std::get<int>(ms.second));
+            } else if(std::holds_alternative<double>(ms.second)) {
+                std::println("[{} | {}] : {}", ms.first, "f64", std::get<double>(ms.second));
+            } else if(std::holds_alternative<std::string>(ms.second)) {
+                std::println("[{} | {}] : {}", ms.first, "str", std::get<std::string>(ms.second));
+            } else {
+                // here is undeclared variables used in expressions and something else i do not know about yet.
+                assert(false);
+                std::println("[{} | {}] : {}", "", "VOID", "ERROR");
+            }
+        }
+    }
+    m_alloc.m_stack_frames.pop_front();
+}
+
+exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
+    if(!expr) { return nullptr; }
+    switch(expr->m_type) {
+    case parser::Expression::Type::ASSIGN: {
+        return std::make_unique<AssignExpression>(this, expr);
+    }
+    case parser::Expression::Type::PRIMARY: {
+        return std::make_unique<PrimaryExpression>(this, expr);
+    }
+    case parser::Expression::Type::FUNC_DECL: {
+        return std::make_unique<FuncDeclExpression>(this, expr);
+    }
+    case parser::Expression::Type::EXPR_LIST: {
+        return std::make_unique<ExprListExpression>(this, expr);
+    }
+    case parser::Expression::Type::ADD: {
+        return std::make_unique<AddExpression>(this, expr);
+    }
+    case parser::Expression::Type::MUL: {
+        return std::make_unique<MulExpression>(this, expr);
+    }
+    case parser::Expression::Type::DIV: {
+        return std::make_unique<DivExpression>(this, expr);
+    }
+    case parser::Expression::Type::RETURN_STMNT: {
+        return std::make_unique<ReturnStmntExpression>(this, expr);
+    }
+    case parser::Expression::Type::UNARY: {
+        return std::make_unique<UnaryExpression>(this, expr);
+    }
+    case parser::Expression::Type::FUNC_CALL: {
+        return std::make_unique<FuncCallExpression>(this, expr);
+    }
+    default: {
+        assert(false);
+        return nullptr;
+    }
+    }
+}
+
+Expression* Executor::get_func_decl(const std::string& name) { return &*m_func_decls.at(name); }
 
 } // namespace interpreter
 
