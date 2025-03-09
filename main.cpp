@@ -11,7 +11,8 @@
 #include <stack>
 #include <any>
 #include <unordered_map>
-#include <parser/parser.hpp>
+
+#include "lexer.hpp"
 
 auto read_source_code() {
     std::ifstream file{ "script.lang" };
@@ -23,203 +24,6 @@ auto read_source_code() {
     file.read(content.data(), content.size());
     return content;
 }
-
-namespace lexer {
-struct Token {
-    /*
-        When adding new types or categories, remember to fill string_names arrays for them.
-    */
-    enum class Category {
-        NONE,
-        TERMINATOR,
-        UNRESOLVED,
-        VARIABLE,
-        NUMBER,
-        STRING,
-        OPERATOR,
-        KEYWORD,
-    };
-    /*
-        When adding new types or categories, remember to fill string_names arrays for them.
-    */
-    enum class Type {
-        NONE,
-        TERMINATOR,
-
-        IDENTIFIER,
-        INT,
-        DOUBLE,
-        STRING,
-
-        PLUS_EQUALS,
-        INC,
-        DEC,
-        EQUALS,
-        MIN,
-        PLUS,
-        MUL,
-        DIV,
-        PAR_OPEN,
-        PAR_CLOSE,
-        COMMA,
-        BRA_OPEN,
-        BRA_CLOSE,
-
-        BREAK,
-        FUNC,
-        RETURN,
-    };
-
-    auto is_empty() const { return m_type == Type::NONE; }
-    auto clear() {
-        m_value.clear();
-        m_type = Type::NONE;
-        m_category = Category::NONE;
-    }
-    std::string m_value;
-    Type m_type{ Type::NONE };
-    Category m_category{ Category::NONE };
-};
-
-static constexpr const char* TOKEN_NAMES[]{
-    "NONE",  "TERMINATOR", "INDENTIFIER", "INT",   "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-    "DEC",   "EQUALS",     "MIN",         "PLUS",  "MUL",    "DIV",    "PAR_OPEN",    "PAR_CLOSE",
-    "COMMA", "BRA_OPEN",   "BRA_CLOSE",   "BREAK", "FUNC",   "RETURN",
-};
-static constexpr const char* TOKEN_CAT_NAMES[]{
-    "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
-};
-
-const char* get_token_type_name(Token::Type type) { return TOKEN_NAMES[std::to_underlying(type)]; }
-const char* get_token_category_string_name(Token::Category type) { return TOKEN_CAT_NAMES[std::to_underlying(type)]; }
-
-static constexpr const char* OPERATORS[]{ "+=", "++", "--", "=", "-", "+", "*", "/", "(", ")", ",", "{", "}" };
-static constexpr Token::Type OPERATOR_TYPES[]{
-    Token::Type::PLUS_EQUALS, Token::Type::INC,       Token::Type::DEC,   Token::Type::EQUALS,
-    Token::Type::MIN,         Token::Type::PLUS,      Token::Type::MUL,   Token::Type::DIV,
-    Token::Type::PAR_OPEN,    Token::Type::PAR_CLOSE, Token::Type::COMMA, Token::Type::BRA_OPEN,
-    Token::Type::BRA_CLOSE,
-};
-static constexpr uint32_t NUM_OPERATORS = sizeof(OPERATORS) / sizeof(OPERATORS[0]);
-
-static constexpr const char* KEYWORDS[]{
-    "break",
-    "func",
-    "return",
-};
-static constexpr Token::Type KEYWORD_TYPES[]{
-    Token::Type::BREAK,
-    Token::Type::FUNC,
-    Token::Type::RETURN,
-};
-static constexpr uint32_t NUM_KEYWORDS = sizeof(KEYWORDS) / sizeof(KEYWORDS[0]);
-
-auto is_white_space(char c) { return c == ' ' || c == '\t' || c == '\n'; }
-
-auto is_operator(std::string_view value) {
-    return std::find(&OPERATORS[0], &OPERATORS[0] + NUM_OPERATORS, value) != &OPERATORS[0] + NUM_OPERATORS;
-}
-
-auto get_operator_type(std::string_view op) {
-    for(auto i = 0; i < NUM_OPERATORS; ++i) {
-        if(op.compare(OPERATORS[i]) == 0) { return OPERATOR_TYPES[i]; }
-    }
-    return Token::Type::NONE;
-}
-
-auto get_keyword_type(std::string_view value) {
-    for(auto i = 0; i < NUM_KEYWORDS; ++i) {
-        if(value.compare(KEYWORDS[i]) == 0) { return KEYWORD_TYPES[i]; }
-    }
-    return Token::Type::NONE;
-}
-
-auto deduce_token_category(std::string_view value) {
-    if(value.empty()) { return Token::Category::NONE; }
-    if(is_white_space(value.at(0)) || value.at(0) == '\0') {
-        return Token::Category::NONE;
-    } else if(value.at(0) == ';') {
-        return Token::Category::TERMINATOR;
-    } else if(get_operator_type(value) != Token::Type::NONE) {
-        return Token::Category::OPERATOR;
-    } else if(value.starts_with('"')) {
-        return Token::Category::STRING;
-    } else if(std::isdigit(value.at(0)) || value.starts_with('.')) {
-        return Token::Category::NUMBER;
-    } else {
-        return Token::Category::UNRESOLVED; // could be variable, keyword, func definition, call
-    }
-}
-
-auto deduce_token_type(Token& token) {
-    std::string_view value = token.m_value;
-    switch(token.m_category) {
-    case Token::Category::UNRESOLVED: {
-        auto type = get_keyword_type(value);
-        if(type != Token::Type::NONE) {
-            token.m_category = Token::Category::KEYWORD;
-            token.m_type = type;
-            return;
-        }
-        token.m_category = Token::Category::VARIABLE;
-        token.m_type = Token::Type::IDENTIFIER;
-        return;
-    }
-    case Token::Category::NUMBER: {
-        if(value.find(".") != std::string::npos) {
-            token.m_type = Token::Type::DOUBLE;
-        } else {
-            token.m_type = Token::Type::INT;
-        }
-        return;
-    }
-    case Token::Category::STRING: {
-        token.m_type = Token::Type::STRING;
-        return;
-    }
-    case Token::Category::OPERATOR: {
-        token.m_type = get_operator_type(value);
-        assert(token.m_type != Token::Type::NONE);
-        return;
-    }
-    case Token::Category::TERMINATOR: {
-        token.m_type = Token::Type::TERMINATOR;
-        return;
-    }
-    default: {
-        assert(false);
-    }
-    }
-}
-
-auto tokenize(std::string_view code) {
-    std::vector<Token> tokens;
-    Token token;
-    for(auto i = 0u; i < code.size(); ++i) {
-        token.m_category = deduce_token_category(code.substr(i, 1));
-        if(token.m_category == Token::Category::NONE) { continue; }
-        for(auto j = 1; j < code.size(); ++j) {
-            if(token.m_category == Token::Category::STRING && code.at(i + j) != '"') { continue; }
-            const auto cat = deduce_token_category(code.substr(i + j, 1));
-            if((cat != token.m_category && !(token.m_category == Token::Category::UNRESOLVED && cat == Token::Category::NUMBER)) // allows variables with numbers in them
-               || (cat == Token::Category::OPERATOR && get_operator_type(code.substr(i, j + 1)) == Token::Type::NONE) // splits operators (they are the same category, but --- should be dec and min)
-               || (token.m_category == Token::Category::STRING && token.m_category == cat)) {
-                token.m_value = code.substr(i, j);
-                if(token.m_category == Token::Category::STRING) {
-                    token.m_value = code.substr(i + 1, j - 1);
-                    ++i;
-                }
-                deduce_token_type(token);
-                tokens.push_back(token);
-                token.clear();
-                i += j - 1;
-                break;
-            }
-        }
-    }
-    return tokens;
-}
-} // namespace lexer
 
 namespace parser {
 
@@ -263,10 +67,7 @@ auto get_expr_name(Expression::Type type) { return EXPR_NAMES[std::to_underlying
 
 class Parser {
   public:
-    Parser(std::string_view code) {
-        auto tokens = lexer::tokenize(code);
-        put_tokens_onto_parse_stack(tokens);
-    }
+    Parser(const std::vector<lexer::Token>& tokens) { put_tokens_onto_parse_stack(tokens); }
 
     std::vector<parse_expr_t> build_ast() {
         m_program.clear();
@@ -452,8 +253,9 @@ void print_ast(const parser::parse_expr_t node, int indent = 0) {
     for(int i = 0; i < indent; ++i) {
         std::cout << "  ";
     }
-    std::println("{} ({} | {})", node->m_node.m_value, lexer::get_token_type_name(node->m_node.m_type),
-                 parser::get_expr_name(node->m_type));
+    std::println("[TODO]: fix the println below");
+    // std::println("{} ({} | {})", node->m_node.m_value, lexer::get_token_type_name(node->m_node.m_type),
+    //              parser::get_expr_name(node->m_type));
 
     print_ast(node->m_left, indent + 1);
     print_ast(node->m_right, indent + 1);
@@ -893,7 +695,29 @@ int main() {
     using namespace lexer;
     using namespace parser;
 
-    parser::Parser p{ read_source_code() };
+    lexer::Tokenizer tokenizer;
+    tokenizer.define_operator(lexer::Operator{ Token::Type::PLUS_EQUALS, "+=" })
+        .define_operator(lexer::Operator{ Token::Type::INC, "++" })
+        .define_operator(lexer::Operator{ Token::Type::DEC, "--" })
+        .define_operator(lexer::Operator{ Token::Type::EQUALS, "=" })
+        .define_operator(lexer::Operator{ Token::Type::MIN, "-" })
+        .define_operator(lexer::Operator{ Token::Type::PLUS, "+" })
+        .define_operator(lexer::Operator{ Token::Type::MUL, "*" })
+        .define_operator(lexer::Operator{ Token::Type::DIV, "/" })
+        .define_operator(lexer::Operator{ Token::Type::PAR_OPEN, "(" })
+        .define_operator(lexer::Operator{ Token::Type::PAR_CLOSE, ")" })
+        .define_operator(lexer::Operator{ Token::Type::COMMA, "," })
+        .define_operator(lexer::Operator{ Token::Type::BRA_OPEN, "{" })
+        .define_operator(lexer::Operator{ Token::Type::BRA_CLOSE, "}" });
+
+    tokenizer.define_keyword(lexer::Keyword{ Token::Type::BREAK, "break" })
+        .define_keyword(lexer::Keyword{ Token::Type::FUNC, "func" })
+        .define_keyword(lexer::Keyword{ Token::Type::RETURN, "return" });
+
+    const auto source_code = read_source_code();
+    const auto tokens = tokenizer.tokenize(source_code);
+
+    parser::Parser p{ tokens };
     auto program = p.build_ast();
     for(auto& p : program) {
         print_ast(p);
