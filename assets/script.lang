@@ -1,7 +1,8 @@
 func f1(a, b, c) {
-	return a, a*b, a/c;
+	return a, b, c;
 }
 
 c = 15;
-d = 9.0;
-j, k, l = f1(c, d, 3.51);
+d = 23.04;
+e = "asdf";
+j, k, l = f1(1, 2, 3);

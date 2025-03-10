@@ -78,9 +78,13 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
 }
 
 literal_t& ExecutorAllocator::StackFrame::get_allocation(const std::string& var_name) {
-    auto ret = m_variables.insert({ var_name, {} });
-    if(ret.second) { m_variable_creation_order.push_back(var_name); }
-    return ret.first->second;
+    auto it = std::find_if(m_variables.begin(), m_variables.end(),
+                           [var_name](const auto& var) { return var.first == var_name; });
+    if(it == m_variables.end()) {
+        m_variables.push_back({ var_name, {} });
+        it = m_variables.begin() + (m_variables.size() - 1);
+    }
+    return it->second;
 }
 
 Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr(expr) {
@@ -92,11 +96,11 @@ void Expression::assign(ExpressionResult* left, const ExpressionResult* right, E
     if(!right->m_return_values.empty()) {
         // handles assignments to variables from function calls: a, k = f()
         auto& top = alloc->get_top_stack_frame();
-        assert(top.m_variable_creation_order.size() >= right->m_return_values.size());
-        auto stack_it = top.m_variable_creation_order.end();
+        assert(top.m_variables.size() >= right->m_return_values.size());
+        auto stack_it = top.m_variables.end();
         auto vec_it = right->m_return_values.end();
         for(auto i = 0; i < right->m_return_values.size(); ++i) {
-            auto& alloc = top.get_allocation(*--stack_it);
+            auto& alloc = top.get_allocation((--stack_it)->first);
             assert(std::holds_alternative<std::monostate>(alloc)); // othwerise: func returns too many values. TODO: check if func returns too few.
             alloc = *--vec_it;
         }
@@ -272,11 +276,6 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
     while(!expr_list_stack.empty()) {
         auto expr = expr_list_stack.top();
         expr_list_stack.pop();
-        // if(!expr->m_left && !expr->m_right) { break; }                     // for empty param list
-        // if(expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) { // for param list with one param
-        //     param_list_var_names.push(expr->m_expr->m_node.m_value);
-        //     break;
-        // }
         if(expr->m_right) {
             auto& val = *get_pmem(expr->m_right->eval(alloc));
             stack_frame.get_allocation(param_list_var_names.front()) = val;
