@@ -1,7 +1,10 @@
+#pragma once
+
 #include <string>
 #include <string_view>
 #include <vector>
 #include <algorithm>
+#include "logger.hpp"
 
 namespace lexer {
 struct Token {
@@ -79,7 +82,10 @@ class Tokenizer {
 struct TokenUtils {
     const char* get_token_name(Token::Type type) const {
         const auto idx = std::to_underlying(type);
-        if(idx >= sizeof(s_token_names) / sizeof(s_token_names[0])) { return s_token_names[0]; }
+        if(idx >= sizeof(s_token_names) / sizeof(s_token_names[0])) {
+            Logger::DebugWarn("Invalid name for token with idx {}", idx);
+            return s_token_names[0];
+        }
         return s_token_names[idx];
     }
     const char* get_category_name(Token::Category cat) const {
