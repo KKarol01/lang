@@ -31,23 +31,6 @@ int main() {
     using namespace parser;
     Logger::DebugWarn("Invalid name for token with idx {}", 1);
     lexer::Tokenizer tokenizer;
-    tokenizer.define_operator(lexer::Operator{ Token::Type::PLUS_EQUALS, "+=" })
-        .define_operator(lexer::Operator{ Token::Type::INC, "++" })
-        .define_operator(lexer::Operator{ Token::Type::DEC, "--" })
-        .define_operator(lexer::Operator{ Token::Type::EQUALS, "=" })
-        .define_operator(lexer::Operator{ Token::Type::MIN, "-" })
-        .define_operator(lexer::Operator{ Token::Type::PLUS, "+" })
-        .define_operator(lexer::Operator{ Token::Type::MUL, "*" })
-        .define_operator(lexer::Operator{ Token::Type::DIV, "/" })
-        .define_operator(lexer::Operator{ Token::Type::PAR_OPEN, "(" })
-        .define_operator(lexer::Operator{ Token::Type::PAR_CLOSE, ")" })
-        .define_operator(lexer::Operator{ Token::Type::COMMA, "," })
-        .define_operator(lexer::Operator{ Token::Type::BRA_OPEN, "{" })
-        .define_operator(lexer::Operator{ Token::Type::BRA_CLOSE, "}" });
-
-    tokenizer.define_keyword(lexer::Keyword{ Token::Type::BREAK, "break" })
-        .define_keyword(lexer::Keyword{ Token::Type::FUNC, "func" })
-        .define_keyword(lexer::Keyword{ Token::Type::RETURN, "return" });
 
     const auto source_code = read_source_code();
     const auto tokens = tokenizer.tokenize(source_code);
