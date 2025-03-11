@@ -27,7 +27,7 @@ class ExecutorAllocator {
     };
 
     ExecutorAllocator(Executor* exec);
-    inline StackFrame& get_top_stack_frame() { return m_stack_frames.front(); }
+    StackFrame& get_top_stack_frame() { return m_stack_frames.front(); }
 
     Executor* m_executor{};
     std::deque<StackFrame> m_stack_frames;
@@ -45,7 +45,7 @@ class Executor {
     Executor(const parser::program_t& p);
 
     exec_expr_t make_expr(const parser::parse_expr_t expr);
-    inline Expression* get_func_decl(const std::string& name) { return &*m_func_decls.at(name); }
+    Expression* get_func_decl(const std::string& name) { return &*m_func_decls.at(name); }
 
   private:
     parser::program_t m_program;
@@ -65,19 +65,17 @@ class Expression {
 
   protected:
     void assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc);
-    inline literal_t* get_pmem(ExpressionResult& res) {
+    literal_t* get_pmem(ExpressionResult& res) {
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
-    inline const literal_t* get_pmem(const ExpressionResult& res) const {
+    const literal_t* get_pmem(const ExpressionResult& res) const {
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
-    inline bool is_int(const ExpressionResult& res) const { return std::holds_alternative<int>(*get_pmem(res)); }
-    inline bool is_double(const ExpressionResult& res) const { return std::holds_alternative<double>(*get_pmem(res)); }
-    inline bool is_string(const ExpressionResult& res) const {
-        return std::holds_alternative<std::string>(*get_pmem(res));
-    }
+    bool is_int(const ExpressionResult& res) const { return std::holds_alternative<int>(*get_pmem(res)); }
+    bool is_double(const ExpressionResult& res) const { return std::holds_alternative<double>(*get_pmem(res)); }
+    bool is_string(const ExpressionResult& res) const { return std::holds_alternative<std::string>(*get_pmem(res)); }
 
     exec_expr_t m_left{};
     exec_expr_t m_right{};

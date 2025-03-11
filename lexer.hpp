@@ -71,7 +71,7 @@ class Tokenizer {
   private:
     const Operator* try_get_operator(std::string_view value) const;
     const Keyword* try_get_keyword(std::string_view value) const;
-    inline bool is_white_space(char c) const;
+    bool is_white_space(char c) const;
     Token::Category deduce_token_category(std::string_view value) const;
     void deduce_token_type(Token& token) const;
 
