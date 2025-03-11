@@ -87,9 +87,19 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
 }
 
 literal_t& ExecutorAllocator::StackFrame::get_allocation(const std::string& var_name) {
-    auto ret = m_variables.insert({ var_name, {} });
-    if(ret.second) { m_variable_creation_order.push_back(var_name); }
-    return ret.first->second;
+    auto* palloc = try_find_allocation(var_name);
+    if(!palloc) {
+        m_variables.push_back(std::make_pair(var_name, literal_t{}));
+        return m_variables.back().second;
+    }
+    return *palloc;
+}
+
+literal_t* ExecutorAllocator::StackFrame::try_find_allocation(const std::string& var_name) {
+    auto it = std::find_if(m_variables.begin(), m_variables.end(),
+                           [&var_name](const auto& var) { return var.first == var_name; });
+    if(it == m_variables.end()) { return nullptr; }
+    return &it->second;
 }
 
 Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr(expr) {
@@ -101,13 +111,11 @@ void Expression::assign(ExpressionResult* left, const ExpressionResult* right, E
     if(!right->m_return_values.empty()) {
         // handles assignments to variables from function calls: a, k = f()
         auto& top = alloc->get_top_stack_frame();
-        assert(top.m_variable_creation_order.size() >= right->m_return_values.size());
-        auto stack_it = top.m_variable_creation_order.end();
+        assert(top.m_variables.size() >= right->m_return_values.size());
+        auto stack_it = top.m_variables.end();
         auto vec_it = right->m_return_values.end();
         for(auto i = 0; i < right->m_return_values.size(); ++i) {
-            auto& alloc = top.get_allocation(*--stack_it);
-            assert(std::holds_alternative<std::monostate>(alloc)); // othwerise: func returns too many values. TODO: check if func returns too few.
-            alloc = *--vec_it;
+            (--stack_it)->second = *--vec_it;
         }
         return;
     }
@@ -299,7 +307,16 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
 
 ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
     auto condition = m_left->eval(alloc);
-    if(std::get<int>(*get_pmem(condition)) == 1) { m_right->eval(alloc); }
+    if(std::get<int>(*get_pmem(condition)) == 1) {
+        alloc->m_stack_frames.push_front(alloc->get_top_stack_frame());
+        m_right->eval(alloc);
+        auto front = alloc->m_stack_frames.front();
+        alloc->m_stack_frames.pop_front();
+        for(auto& [name, val] : front.m_variables) {
+            auto* palloc = alloc->get_top_stack_frame().try_find_allocation(name);
+            if(palloc) { *palloc = val; }
+        }
+    }
     return ExpressionResult{ .m_type = m_expr->m_node.m_type };
 }
 
