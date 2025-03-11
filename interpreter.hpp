@@ -22,6 +22,7 @@ class ExecutorAllocator {
   public:
     struct StackFrame {
         literal_t& get_allocation(const std::string& var_name);
+        literal_t* try_find_allocation(const std::string& var_name);
         std::deque<std::pair<std::string, literal_t>> m_variables;
     };
 
