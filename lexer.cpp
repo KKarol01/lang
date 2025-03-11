@@ -7,6 +7,8 @@ Tokenizer::Tokenizer() {
     define_operator(Operator{ Token::Type::PLUS_EQUALS, "+=" });
     define_operator(Operator{ Token::Type::INC, "++" });
     define_operator(Operator{ Token::Type::DEC, "--" });
+    define_operator(Operator{ Token::Type::LOGICAL_AND, "&&" });
+    define_operator(Operator{ Token::Type::AND, "&" });
     define_operator(Operator{ Token::Type::EQUALS, "=" });
     define_operator(Operator{ Token::Type::MIN, "-" });
     define_operator(Operator{ Token::Type::PLUS, "+" });
@@ -17,6 +19,9 @@ Tokenizer::Tokenizer() {
     define_operator(Operator{ Token::Type::COMMA, "," });
     define_operator(Operator{ Token::Type::BRA_OPEN, "{" });
     define_operator(Operator{ Token::Type::BRA_CLOSE, "}" });
+    define_operator(Operator{ Token::Type::COLON, ":" });
+    define_operator(Operator{ Token::Type::LT, "<" });
+    define_operator(Operator{ Token::Type::GT, ">" });
 
     define_keyword(Keyword{ Token::Type::BREAK, "break" });
     define_keyword(Keyword{ Token::Type::FUNC, "func" });

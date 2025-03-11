@@ -62,6 +62,10 @@ class Expression {
     Expression(Executor* exec, const parser::parse_expr_t expr);
     virtual ~Expression() = default;
     virtual ExpressionResult eval(ExecutorAllocator* alloc) = 0;
+    std::string_view get_node_value() const {
+        if(!m_expr) { return std::string_view{}; }
+        return m_expr->m_node.m_value;
+    }
 
   protected:
     void assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc);
@@ -157,6 +161,27 @@ class FuncCallExpression final : public Expression {
 
   private:
     void transfer_call_args(Expression* func_decl_expr, ExecutorAllocator* alloc);
+};
+
+class IfStmntExpression final : public Expression {
+  public:
+    IfStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~IfStmntExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
+};
+
+class LogicalOpExpression final : public Expression {
+  public:
+    LogicalOpExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~LogicalOpExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
+};
+
+class LogicalCompExpression final : public Expression {
+  public:
+    LogicalCompExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~LogicalCompExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
 };
 
 } // namespace interpreter

@@ -31,6 +31,8 @@ struct Token {
         PLUS_EQUALS,
         INC,
         DEC,
+        LOGICAL_AND,
+        AND,
         EQUALS,
         MIN,
         PLUS,
@@ -41,6 +43,9 @@ struct Token {
         COMMA,
         BRA_OPEN,
         BRA_CLOSE,
+        COLON,
+        LT,
+        GT,
 
         BREAK,
         FUNC,
@@ -98,9 +103,10 @@ struct TokenUtils {
     }
 
     inline static constexpr const char* s_token_names[]{
-        "NONE",  "TERMINATOR", "IDENTIFIER", "INT",   "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-        "DEC",   "EQUALS",     "MIN",        "PLUS",  "MUL",    "DIV",    "PAR_OPEN",    "PAR_CLOSE",
-        "COMMA", "BRA_OPEN",   "BRA_CLOSE",  "BREAK", "FUNC",   "RETURN", "IF",
+        "NONE",  "TERMINATOR", "IDENTIFIER",  "INT",       "DOUBLE", "STRING",   "PLUS_EQUALS",
+        "INC",   "DEC",        "LOGICAL_AND", "AND",       "EQUALS", "MIN",      "PLUS",
+        "MUL",   "DIV",        "PAR_OPEN",    "PAR_CLOSE", "COMMA",  "BRA_OPEN", "BRA_CLOSE",
+        "COLON", "LT",         "GT",          "BREAK",     "FUNC",   "RETURN",   "IF",
     };
     inline static constexpr const char* s_category_names[]{
         "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
