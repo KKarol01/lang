@@ -31,6 +31,8 @@ struct Token {
         PLUS_EQUALS,
         INC,
         DEC,
+        LOGICAL_AND,
+        AND,
         EQUALS,
         MIN,
         PLUS,
@@ -41,10 +43,14 @@ struct Token {
         COMMA,
         BRA_OPEN,
         BRA_CLOSE,
+        COLON,
+        LT,
+        GT,
 
         BREAK,
         FUNC,
         RETURN,
+        IF,
     };
 
     std::string m_value;
@@ -64,14 +70,16 @@ struct Keyword {
 
 class Tokenizer {
   public:
-    Tokenizer& define_operator(const Operator& op);
-    Tokenizer& define_keyword(const Keyword& op);
+    Tokenizer();
     std::vector<Token> tokenize(std::string_view code) const;
 
   private:
+    void define_operator(const Operator& op);
+    void define_keyword(const Keyword& op);
+
     const Operator* try_get_operator(std::string_view value) const;
     const Keyword* try_get_keyword(std::string_view value) const;
-    inline bool is_white_space(char c) const;
+    bool is_white_space(char c) const;
     Token::Category deduce_token_category(std::string_view value) const;
     void deduce_token_type(Token& token) const;
 
@@ -95,9 +103,10 @@ struct TokenUtils {
     }
 
     inline static constexpr const char* s_token_names[]{
-        "NONE",  "TERMINATOR", "IDENTIFIER", "INT",   "DOUBLE", "STRING", "PLUS_EQUALS", "INC",
-        "DEC",   "EQUALS",     "MIN",        "PLUS",  "MUL",    "DIV",    "PAR_OPEN",    "PAR_CLOSE",
-        "COMMA", "BRA_OPEN",   "BRA_CLOSE",  "BREAK", "FUNC",   "RETURN",
+        "NONE",  "TERMINATOR", "IDENTIFIER",  "INT",       "DOUBLE", "STRING",   "PLUS_EQUALS",
+        "INC",   "DEC",        "LOGICAL_AND", "AND",       "EQUALS", "MIN",      "PLUS",
+        "MUL",   "DIV",        "PAR_OPEN",    "PAR_CLOSE", "COMMA",  "BRA_OPEN", "BRA_CLOSE",
+        "COLON", "LT",         "GT",          "BREAK",     "FUNC",   "RETURN",   "IF",
     };
     inline static constexpr const char* s_category_names[]{
         "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",

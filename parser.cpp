@@ -27,15 +27,36 @@ void Parser::insert_terminator() {
 
 parse_expr_t Parser::parse_prim_expr() {
     auto node = get();
-    assert(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
-           node.m_type == parse_node_t::Type::DOUBLE || node.m_type == parse_node_t::Type::STRING ||
-           node.m_type == parse_node_t::Type::FUNC);
+    if(!(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
+         node.m_type == parse_node_t::Type::DOUBLE || node.m_type == parse_node_t::Type::STRING ||
+         node.m_type == parse_node_t::Type::FUNC || node.m_type == parse_node_t::Type::IF)) {
+        assert(false);
+        return nullptr; // todo: maybe throw here
+    }
     m_stack.pop();
     return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = node });
 }
 
+parse_expr_t Parser::parse_if_expr() {
+    auto if_kw = parse_prim_expr();
+    if(if_kw->m_node.m_type != parse_node_t::Type::IF) { return if_kw; }
+    auto if_cond = parse_logical_expr();
+    assert(get().m_type == parse_node_t::Type::COLON);
+    take();
+    assert(get().m_type == parse_node_t::Type::BRA_OPEN);
+    take();
+    auto if_body = parse_statement();
+    while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
+        auto right = parse_statement();
+        if_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = if_body, .m_right = right });
+    }
+    take();
+    insert_terminator();
+    return make_expr(Expression{ .m_type = Expression::Type::IF_STMNT, .m_node = if_kw->m_node, .m_left = if_cond, .m_right = if_body });
+}
+
 parse_expr_t Parser::parse_func_expr() {
-    parse_expr_t func_kw = parse_prim_expr();
+    parse_expr_t func_kw = parse_if_expr();
     parse_expr_t func_name{};
     parse_expr_t func_param_list{};
     parse_expr_t func_body{};
@@ -130,11 +151,31 @@ parse_expr_t Parser::parse_add_expr() {
     return left;
 }
 
-parse_expr_t Parser::parse_assign_expr() {
+parse_expr_t Parser::parse_comp_expr() {
     auto left = parse_add_expr();
-    while(get().m_type == parse_node_t::Type::EQUALS) {
+    while(get().m_type == parse_node_t::Type::LT || get().m_type == parse_node_t::Type::GT) {
         auto node = take();
         auto right = parse_add_expr();
+        left = make_expr(Expression{ .m_type = Expression::Type::LOGICAL_COMPARE, .m_node = node, .m_left = left, .m_right = right });
+    }
+    return left;
+}
+
+parse_expr_t Parser::parse_logical_expr() {
+    auto left = parse_comp_expr();
+    while(get().m_type == parse_node_t::Type::LOGICAL_AND) {
+        auto node = take();
+        auto right = parse_comp_expr();
+        left = make_expr(Expression{ .m_type = Expression::Type::LOGICAL_OP, .m_node = node, .m_left = left, .m_right = right });
+    }
+    return left;
+}
+
+parse_expr_t Parser::parse_assign_expr() {
+    auto left = parse_logical_expr();
+    while(get().m_type == parse_node_t::Type::EQUALS) {
+        auto node = take();
+        auto right = parse_logical_expr();
         left = make_expr(Expression{ .m_type = Expression::Type::ASSIGN, .m_node = node, .m_left = left, .m_right = right });
     }
     return left;

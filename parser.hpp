@@ -4,6 +4,7 @@
 #include <utility>
 #include <stack>
 #include <deque>
+#include "logger.hpp"
 #include "lexer.hpp"
 
 namespace parser {
@@ -26,25 +27,35 @@ struct Expression {
         DIV,
         ADD,
         ASSIGN,
+        LOGICAL_COMPARE,
+        LOGICAL_OP,
         FUNC_DECL,
         FUNC_CALL,
         EXPR_LIST,
         RETURN_STMNT,
+        IF_STMNT,
     };
-    Type m_type;
-    parse_node_t m_node;
+    Type m_type{ Type::NONE };
+    parse_node_t m_node{};
     parse_expr_t m_left{};
     parse_expr_t m_right{};
 };
 
-static constexpr const char* EXPR_NAMES[]{
-    "NONE", "PRIMARY", "POSTFIX",   "UNARY",     "MIN",       "MUL",          "DIV",
-    "ADD",  "ASSIGN",  "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT",
-};
-static constexpr uint32_t NUM_EXPRS = sizeof(EXPR_NAMES) / sizeof(EXPR_NAMES[0]);
+struct ExpressionUtils {
+    const char* get_expression_name(Expression::Type type) const {
+        const auto idx = std::to_underlying(type);
+        if(idx >= sizeof(s_expr_names) / sizeof(s_expr_names[0])) {
+            Logger::DebugWarn("Invalid name for token with idx {}", idx);
+            return s_expr_names[0];
+        }
+        return s_expr_names[idx];
+    }
 
-// todo: move this to utils
-inline auto get_expr_name(Expression::Type type) { return EXPR_NAMES[std::to_underlying(type)]; }
+    inline static constexpr const char* s_expr_names[]{
+        "NONE",   "PRIMARY",         "POSTFIX",    "UNARY",     "MIN",       "MUL",       "DIV",          "ADD",
+        "ASSIGN", "LOGICAL_COMPARE", "LOGICAL_OP", "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT", "IF_STMNT",
+    };
+};
 
 class Parser {
   public:
@@ -59,21 +70,24 @@ class Parser {
     // for example brackets: func f1() {}; or if statements.
     void insert_terminator();
 
-    inline parse_node_t& get() { return m_stack.top(); }
-    inline parse_node_t take() {
+    parse_node_t& get() { return m_stack.top(); }
+    parse_node_t take() {
         auto top = m_stack.top();
         m_stack.pop();
         return top;
     }
-    inline parse_expr_t make_expr() { return &m_ast.emplace_back(); }
-    inline parse_expr_t make_expr(const Expression& expr) { return &m_ast.emplace_back(expr); }
+    parse_expr_t make_expr() { return &m_ast.emplace_back(); }
+    parse_expr_t make_expr(const Expression& expr) { return &m_ast.emplace_back(expr); }
 
     parse_expr_t parse_prim_expr();
     parse_expr_t parse_func_expr();
+    parse_expr_t parse_if_expr();
     parse_expr_t parse_post_expr();
     parse_expr_t parse_unar_expr();
     parse_expr_t parse_mul_expr();
     parse_expr_t parse_add_expr();
+    parse_expr_t parse_comp_expr();
+    parse_expr_t parse_logical_expr();
     parse_expr_t parse_assign_expr();
     parse_expr_t parse_expr_list();
     parse_expr_t parse_expr();

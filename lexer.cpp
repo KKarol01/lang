@@ -1,17 +1,39 @@
 #include "lexer.hpp"
 #include <cassert>
 
-lexer::Tokenizer& lexer::Tokenizer::define_operator(const Operator& op) {
-    m_operators.push_back(op);
-    return *this;
+namespace lexer {
+
+Tokenizer::Tokenizer() {
+    define_operator(Operator{ Token::Type::PLUS_EQUALS, "+=" });
+    define_operator(Operator{ Token::Type::INC, "++" });
+    define_operator(Operator{ Token::Type::DEC, "--" });
+    define_operator(Operator{ Token::Type::LOGICAL_AND, "&&" });
+    define_operator(Operator{ Token::Type::AND, "&" });
+    define_operator(Operator{ Token::Type::EQUALS, "=" });
+    define_operator(Operator{ Token::Type::MIN, "-" });
+    define_operator(Operator{ Token::Type::PLUS, "+" });
+    define_operator(Operator{ Token::Type::MUL, "*" });
+    define_operator(Operator{ Token::Type::DIV, "/" });
+    define_operator(Operator{ Token::Type::PAR_OPEN, "(" });
+    define_operator(Operator{ Token::Type::PAR_CLOSE, ")" });
+    define_operator(Operator{ Token::Type::COMMA, "," });
+    define_operator(Operator{ Token::Type::BRA_OPEN, "{" });
+    define_operator(Operator{ Token::Type::BRA_CLOSE, "}" });
+    define_operator(Operator{ Token::Type::COLON, ":" });
+    define_operator(Operator{ Token::Type::LT, "<" });
+    define_operator(Operator{ Token::Type::GT, ">" });
+
+    define_keyword(Keyword{ Token::Type::BREAK, "break" });
+    define_keyword(Keyword{ Token::Type::FUNC, "func" });
+    define_keyword(Keyword{ Token::Type::RETURN, "return" });
+    define_keyword(Keyword{ Token::Type::IF, "if" });
 }
 
-lexer::Tokenizer& lexer::Tokenizer::define_keyword(const Keyword& op) {
-    m_keywords.push_back(op);
-    return *this;
-}
+void Tokenizer::define_operator(const Operator& op) { m_operators.push_back(op); }
 
-std::vector<lexer::Token> lexer::Tokenizer::tokenize(std::string_view code) const {
+void Tokenizer::define_keyword(const Keyword& op) { m_keywords.push_back(op); }
+
+std::vector<Token> Tokenizer::tokenize(std::string_view code) const {
     std::vector<Token> tokens;
     for(auto i = 0u; i < code.size(); ++i) {
         Token token{ .m_category = deduce_token_category(code.substr(i, 1)) };
@@ -38,22 +60,22 @@ std::vector<lexer::Token> lexer::Tokenizer::tokenize(std::string_view code) cons
     return tokens;
 }
 
-const lexer::Operator* lexer::Tokenizer::try_get_operator(std::string_view value) const {
+const Operator* Tokenizer::try_get_operator(std::string_view value) const {
     auto it =
         std::find_if(m_operators.begin(), m_operators.end(), [value](const Operator& e) { return e.m_value == value; });
     if(it == m_operators.end()) { return nullptr; }
     return &*it;
 }
 
-const lexer::Keyword* lexer::Tokenizer::try_get_keyword(std::string_view value) const {
+const Keyword* Tokenizer::try_get_keyword(std::string_view value) const {
     auto it = std::find_if(m_keywords.begin(), m_keywords.end(), [value](const Keyword& e) { return e.m_value == value; });
     if(it == m_keywords.end()) { return nullptr; }
     return &*it;
 }
 
-bool lexer::Tokenizer::is_white_space(char c) const { return c == ' ' || c == '\t' || c == '\n'; }
+bool Tokenizer::is_white_space(char c) const { return c == ' ' || c == '\t' || c == '\n'; }
 
-lexer::Token::Category lexer::Tokenizer::deduce_token_category(std::string_view value) const {
+Token::Category Tokenizer::deduce_token_category(std::string_view value) const {
     if(value.empty()) { return Token::Category::NONE; }
     if(is_white_space(value.at(0)) || value.at(0) == '\0') {
         return Token::Category::NONE;
@@ -70,7 +92,7 @@ lexer::Token::Category lexer::Tokenizer::deduce_token_category(std::string_view 
     }
 }
 
-void lexer::Tokenizer::deduce_token_type(Token& token) const {
+void Tokenizer::deduce_token_type(Token& token) const {
     std::string_view value = token.m_value;
     switch(token.m_category) {
     case Token::Category::UNRESOLVED: {
@@ -114,3 +136,5 @@ void lexer::Tokenizer::deduce_token_type(Token& token) const {
     }
     }
 }
+
+} // namespace lexer

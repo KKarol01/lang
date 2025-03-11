@@ -70,6 +70,15 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
     case parser::Expression::Type::FUNC_CALL: {
         return std::make_unique<FuncCallExpression>(this, expr);
     }
+    case parser::Expression::Type::LOGICAL_COMPARE: {
+        return std::make_unique<LogicalCompExpression>(this, expr);
+    }
+    case parser::Expression::Type::LOGICAL_OP: {
+        return std::make_unique<LogicalOpExpression>(this, expr);
+    }
+    case parser::Expression::Type::IF_STMNT: {
+        return std::make_unique<IfStmntExpression>(this, expr);
+    }
     default: {
         assert(false);
         return nullptr;
@@ -87,6 +96,13 @@ literal_t& ExecutorAllocator::StackFrame::get_allocation(const std::string& var_
     return it->second;
 }
 
+literal_t* ExecutorAllocator::StackFrame::try_find_allocation(const std::string& var_name) {
+    auto it = std::find_if(m_variables.begin(), m_variables.end(),
+                           [&var_name](const auto& var) { return var.first == var_name; });
+    if(it == m_variables.end()) { return nullptr; }
+    return &it->second;
+}
+
 Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr(expr) {
     m_left = exec->make_expr(expr->m_left);
     m_right = exec->make_expr(expr->m_right);
@@ -100,9 +116,7 @@ void Expression::assign(ExpressionResult* left, const ExpressionResult* right, E
         auto stack_it = top.m_variables.end();
         auto vec_it = right->m_return_values.end();
         for(auto i = 0; i < right->m_return_values.size(); ++i) {
-            auto& alloc = top.get_allocation((--stack_it)->first);
-            assert(std::holds_alternative<std::monostate>(alloc)); // othwerise: func returns too many values. TODO: check if func returns too few.
-            alloc = *--vec_it;
+            (--stack_it)->second = *--vec_it;
         }
         return;
     }
@@ -290,6 +304,65 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
         }
     }
     alloc->m_stack_frames.push_front(std::move(stack_frame));
+}
+
+ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
+    auto condition = m_left->eval(alloc);
+    if(std::get<int>(*get_pmem(condition)) == 1) {
+        alloc->m_stack_frames.push_front(alloc->get_top_stack_frame());
+        m_right->eval(alloc);
+        auto front = alloc->m_stack_frames.front();
+        alloc->m_stack_frames.pop_front();
+        for(auto& [name, val] : front.m_variables) {
+            auto* palloc = alloc->get_top_stack_frame().try_find_allocation(name);
+            if(palloc) { *palloc = val; }
+        }
+    }
+    return ExpressionResult{ .m_type = m_expr->m_node.m_type };
+}
+
+ExpressionResult LogicalOpExpression::eval(ExecutorAllocator* alloc) {
+    auto left = m_left->eval(alloc);
+    auto right = m_right->eval(alloc);
+    if(!(is_int(left) && is_int(right))) {
+        assert(false);
+        return ExpressionResult{ .m_memory = literal_t{ 0 }, .m_type = m_expr->m_node.m_type };
+    }
+
+    int res = 0;
+    if(m_expr->m_node.m_type == lexer::Token::Type::LOGICAL_AND) {
+        res = std::get<int>(*get_pmem(left)) * std::get<int>(*get_pmem(right));
+    } else {
+        Logger::DebugWarn("Unhandled logical operator: {}", get_node_value());
+        assert(false);
+    }
+
+    res = std::min(1, std::max(0, res));
+    return ExpressionResult{ .m_memory = literal_t{ res }, .m_type = m_expr->m_node.m_type };
+}
+
+ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
+    auto left = m_left->eval(alloc);
+    auto right = m_right->eval(alloc);
+    if(!(is_int(left) || is_double(left)) && !(is_double(right) || is_double(right))) {
+        Logger::DebugWarn("Trying to compare number with string or string with string: {} {} {}",
+                          m_left->get_node_value(), get_node_value(), m_right->get_node_value());
+        assert(false); // todo: probably throw
+        return ExpressionResult{ .m_memory = literal_t{ 0 }, .m_type = m_expr->m_node.m_type };
+    }
+
+    double vleft = is_int(left) ? std::get<int>(*get_pmem(left)) : std::get<double>(*get_pmem(left));
+    double vright = is_int(right) ? std::get<int>(*get_pmem(right)) : std::get<double>(*get_pmem(right));
+    int res = 0;
+    if(m_expr->m_node.m_type == lexer::Token::Type::LT) {
+        res = (vleft < vright) ? 1 : 0;
+    } else if(m_expr->m_node.m_type == lexer::Token::Type::GT) {
+        res = (vleft > vright) ? 1 : 0;
+    } else {
+        Logger::DebugWarn("Unhandled comparison operator: {}", get_node_value());
+        assert(false);
+    }
+    return ExpressionResult{ .m_memory = literal_t{ res }, .m_type = m_expr->m_node.m_type };
 }
 
 } // namespace interpreter
