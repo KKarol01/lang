@@ -108,6 +108,14 @@ Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr
     m_right = exec->make_expr(expr->m_right);
 }
 
+//void Expression::assign(literal_t& literal, const ExpressionResult& res) {
+//    if(res.m_return_values.empty()) {
+//        literal = *get_pmem(res);
+//        return;
+//    }
+//    literal = res.m_return_values.back();
+//}
+
 void Expression::assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc) {
     assert(right->m_return_values.empty());
     auto* assigned = get_pmem(*right);

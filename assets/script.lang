@@ -8,7 +8,7 @@ func b1(a) {
 	return a;
 }
 func b2(a, b) {
-	return a, a + b;
+	return a, a + b1(b + a2());
 }
 
-d,e = b2(1 + 3, a1());
+d,f = a2();

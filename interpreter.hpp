@@ -84,13 +84,16 @@ class Expression {
             if(expr->m_right) { dfs_traverse_expr_list(&*expr->m_right, callback); }
         }
     }
+    //static void assign(literal_t& literal, const ExpressionResult& res);
 
     void assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc);
     static literal_t* get_pmem(ExpressionResult& res) {
+        if(!res.m_return_values.empty()) { return &res.m_return_values.back(); }
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
     static const literal_t* get_pmem(const ExpressionResult& res) {
+        if(!res.m_return_values.empty()) { return &res.m_return_values.back(); }
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
