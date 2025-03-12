@@ -109,17 +109,7 @@ Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr
 }
 
 void Expression::assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc) {
-    if(!right->m_return_values.empty()) {
-        // handles assignments to variables from function calls: a, k = f()
-        auto& top = alloc->get_top_stack_frame();
-        assert(top.m_variables.size() >= right->m_return_values.size());
-        auto stack_it = top.m_variables.end();
-        auto vec_it = right->m_return_values.end();
-        for(auto i = 0; i < right->m_return_values.size(); ++i) {
-            (--stack_it)->second = *--vec_it;
-        }
-        return;
-    }
+    assert(right->m_return_values.empty());
     auto* assigned = get_pmem(*right);
     if(!std::holds_alternative<literal_t*>(left->m_memory)) {
         assert(false);
@@ -224,10 +214,21 @@ ExpressionResult DivExpression::eval(ExecutorAllocator* alloc) {
 }
 
 ExpressionResult AssignExpression::eval(ExecutorAllocator* alloc) {
-    auto assignee = m_left->eval(alloc);
-    auto assigned = m_right->eval(alloc);
-    assign(&assignee, &assigned, alloc);
-    return assignee;
+    if(m_right->get_parse_expr()->m_type != parser::Expression::Type::FUNC_CALL) {
+        auto assignee = m_left->eval(alloc);
+        auto assigned = m_right->eval(alloc);
+        assign(&assignee, &assigned, alloc);
+        return assignee;
+    } else {
+        auto ret_vals = m_right->eval(alloc);
+        assert(!ret_vals.m_return_values.empty());
+        dfs_traverse_expr_list(&*m_left, [alloc, &ret_vals](Expression* expr) {
+            assert(expr->get_parse_expr()->m_type == parser::Expression::Type::PRIMARY);
+            alloc->get_top_stack_frame().get_allocation(std::string{ expr->get_node_value() }) =
+                ret_vals.m_return_values.front();
+            ret_vals.m_return_values.erase(ret_vals.m_return_values.begin());
+        });
+    }
 }
 
 ExpressionResult FuncDeclExpression::eval(ExecutorAllocator* alloc) {
@@ -241,6 +242,13 @@ ExpressionResult ExprListExpression::eval(ExecutorAllocator* alloc) {
 }
 
 ExpressionResult ReturnStmntExpression::eval(ExecutorAllocator* alloc) {
+#if 1
+    ExpressionResult res{ .m_type = m_expr->m_node.m_type };
+    dfs_traverse_expr_list(&*m_left, [&res, alloc](Expression* expr) {
+        res.m_return_values.push_back(*get_pmem(expr->eval(alloc)));
+    });
+    return res;
+#else
     std::vector<literal_t> results;
     std::stack<Expression*> expr_list_stack;
     expr_list_stack.push(&*m_left);
@@ -258,6 +266,7 @@ ExpressionResult ReturnStmntExpression::eval(ExecutorAllocator* alloc) {
         if(expr->m_right) { results.push_back(*get_pmem(expr->m_right->eval(alloc))); }
     }
     return ExpressionResult{ .m_return_values = { results.rbegin(), results.rend() }, .m_type = m_expr->m_node.m_type };
+#endif
 }
 
 ExpressionResult FuncCallExpression::eval(ExecutorAllocator* alloc) {
@@ -269,6 +278,19 @@ ExpressionResult FuncCallExpression::eval(ExecutorAllocator* alloc) {
 }
 
 void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, ExecutorAllocator* alloc) {
+#if 1
+    ExecutorAllocator::StackFrame sf;
+    dfs_traverse(&*func_decl_expr->m_left, [&sf](Expression* expr) {
+        if(expr->get_parse_expr()->m_type == parser::Expression::Type::PRIMARY) {
+            sf.get_allocation(std::string{ expr->get_node_value() });
+        }
+    });
+    uint32_t offset = 0;
+    dfs_traverse_expr_list(&*m_left, [alloc, &sf, &offset](Expression* expr) {
+        (sf.m_variables.begin() + offset++)->second = *get_pmem(expr->eval(alloc));
+    });
+    alloc->m_stack_frames.push_front(std::move(sf));
+#else
     std::stack<Expression*> expr_list_stack;
     std::stack<Expression*> param_list_stack;
     std::queue<std::string> param_list_var_names;
@@ -315,6 +337,7 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
         }
     }
     alloc->m_stack_frames.push_front(std::move(stack_frame));
+#endif
 }
 
 ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {

@@ -171,35 +171,35 @@ parse_expr_t Parser::parse_logical_expr() {
     return left;
 }
 
-parse_expr_t Parser::parse_assign_expr() {
-    auto left = parse_logical_expr();
-    while(get().m_type == parse_node_t::Type::EQUALS) {
-        auto node = take();
-        auto right = parse_logical_expr();
-        left = make_expr(Expression{ .m_type = Expression::Type::ASSIGN, .m_node = node, .m_left = left, .m_right = right });
-    }
-    return left;
-}
-
 parse_expr_t Parser::parse_expr_list() {
-    auto left = parse_assign_expr();
+    auto left = parse_logical_expr();
     while(get().m_type == parse_node_t::Type::COMMA) {
         auto node = take();
-        auto right = parse_assign_expr();
+        auto right = parse_logical_expr();
         left = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_node = node, .m_left = left, .m_right = right });
     }
     return left;
 }
 
-parse_expr_t Parser::parse_expr() { return parse_expr_list(); }
+parse_expr_t Parser::parse_assign_expr() {
+    auto left = parse_expr_list();
+    while(get().m_type == parse_node_t::Type::EQUALS) {
+        auto node = take();
+        auto right = parse_expr_list();
+        left = make_expr(Expression{ .m_type = Expression::Type::ASSIGN, .m_node = node, .m_left = left, .m_right = right });
+    }
+    return left;
+}
+
+parse_expr_t Parser::parse_expr() { return parse_assign_expr(); }
 
 parse_expr_t Parser::parse_return_statement() {
     if(get().m_type == lexer::Token::Type::RETURN) {
         auto ret = take();
-        auto list = parse_expr_list();
+        auto list = parse_assign_expr();
         return make_expr(Expression{ .m_type = Expression::Type::RETURN_STMNT, .m_node = ret, .m_left = list });
     }
-    return parse_expr_list();
+    return parse_assign_expr();
 }
 
 parse_expr_t Parser::parse_statement() {

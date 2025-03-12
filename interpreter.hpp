@@ -62,18 +62,35 @@ class Expression {
     Expression(Executor* exec, const parser::parse_expr_t expr);
     virtual ~Expression() = default;
     virtual ExpressionResult eval(ExecutorAllocator* alloc) = 0;
+    const parser::parse_expr_t get_parse_expr() const { return m_expr; }
     std::string_view get_node_value() const {
         if(!m_expr) { return std::string_view{}; }
         return m_expr->m_node.m_value;
     }
 
   protected:
+    static void dfs_traverse(Expression* expr, const auto& callback) {
+        if(!expr) { return; }
+        if(expr->m_left) { dfs_traverse(&*expr->m_left, callback); }
+        callback(expr);
+        if(expr->m_right) { dfs_traverse(&*expr->m_right, callback); }
+    }
+    static void dfs_traverse_expr_list(Expression* expr, const auto& callback) {
+        if(!expr) { return; }
+        if(expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) {
+            callback(&*expr);
+        } else {
+            if(expr->m_left) { dfs_traverse_expr_list(&*expr->m_left, callback); }
+            if(expr->m_right) { dfs_traverse_expr_list(&*expr->m_right, callback); }
+        }
+    }
+
     void assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc);
-    literal_t* get_pmem(ExpressionResult& res) {
+    static literal_t* get_pmem(ExpressionResult& res) {
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
-    const literal_t* get_pmem(const ExpressionResult& res) const {
+    static const literal_t* get_pmem(const ExpressionResult& res) {
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
