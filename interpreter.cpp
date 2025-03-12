@@ -363,6 +363,7 @@ ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
             auto* palloc = alloc->get_top_stack_frame().try_find_allocation(name);
             if(palloc) { *palloc = val; }
         }
+        alloc->get_top_stack_frame().m_return_stmn_hit = front.m_return_stmn_hit;
     }
     return body_result;
 }
