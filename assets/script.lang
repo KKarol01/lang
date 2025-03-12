@@ -1,8 +1,9 @@
-func f1(a, b, c) {
-	return a, b, c;
+func b(a) {
+	if a > 0: {
+		return 1;
+	}
+	return 0;
 }
 
-c = 15;
-d = 23.04;
-e = "asdf";
-j, k, l = f1(1, 2, 3);
+a = 12;
+a = b(a);

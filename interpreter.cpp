@@ -29,8 +29,8 @@ Executor::Executor(const parser::program_t& p) : m_program(p), m_alloc(this) {
                 std::println("[{} | {}] : {}", ms.first, "str", std::get<std::string>(ms.second));
             } else {
                 // here is undeclared variables used in expressions and something else i do not know about yet.
-                assert(false);
-                std::println("[{} | {}] : {}", "", "VOID", "ERROR");
+                // assert(false); todo: fix that
+                // std::println("[{} | {}] : {}", "", "VOID");
             }
         }
     }
@@ -247,12 +247,15 @@ ExpressionResult ReturnStmntExpression::eval(ExecutorAllocator* alloc) {
     while(!expr_list_stack.empty()) {
         auto expr = expr_list_stack.top();
         expr_list_stack.pop();
-        results.push_back(*get_pmem(expr->m_right->eval(alloc)));
-        if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
-            expr_list_stack.push(&*expr->m_left);
-        } else {
-            results.push_back(*get_pmem(expr->m_left->eval(alloc)));
+        if(expr->m_left) {
+            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
+                expr_list_stack.push(&*expr->m_left);
+            } else {
+                results.push_back(*get_pmem(expr->m_left->eval(alloc)));
+            }
         }
+        if(!expr->m_left && !expr->m_right) { results.push_back(*get_pmem(expr->eval(alloc))); }
+        if(expr->m_right) { results.push_back(*get_pmem(expr->m_right->eval(alloc))); }
     }
     return ExpressionResult{ .m_return_values = { results.rbegin(), results.rend() }, .m_type = m_expr->m_node.m_type };
 }
@@ -274,16 +277,17 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
     while(!param_list_stack.empty()) {
         auto expr = param_list_stack.top();
         param_list_stack.pop();
-        if(!expr->m_left && !expr->m_right) { break; }                    // for empty param list
         if(expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) { // for param list with one param
             param_list_var_names.push(expr->m_expr->m_node.m_value);
             break;
         }
         if(expr->m_right) { param_list_var_names.push(expr->m_right->m_expr->m_node.m_value); }
-        if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
-            param_list_stack.push(&*expr->m_left);
-        } else {
-            param_list_var_names.push(expr->m_left->m_expr->m_node.m_value);
+        if(expr->m_left) {
+            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
+                param_list_stack.push(&*expr->m_left);
+            } else {
+                param_list_var_names.push(expr->m_left->m_expr->m_node.m_value);
+            }
         }
     }
     ExecutorAllocator::StackFrame stack_frame;
@@ -295,10 +299,17 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
             stack_frame.get_allocation(param_list_var_names.front()) = val;
             param_list_var_names.pop();
         }
-        if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
-            expr_list_stack.push(&*expr->m_left);
-        } else {
-            auto& val = *get_pmem(expr->m_left->eval(alloc));
+        if(expr->m_left) {
+            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
+                expr_list_stack.push(&*expr->m_left);
+            } else {
+                auto& val = *get_pmem(expr->m_left->eval(alloc));
+                stack_frame.get_allocation(param_list_var_names.front()) = val;
+                param_list_var_names.pop();
+            }
+        }
+        if(!expr->m_left && !expr->m_right && expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) {
+            auto& val = *get_pmem(expr->eval(alloc)); // todo: else above probably is dead code
             stack_frame.get_allocation(param_list_var_names.front()) = val;
             param_list_var_names.pop();
         }
