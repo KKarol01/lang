@@ -215,9 +215,9 @@ void print_ast(const parser::parse_expr_t node, int indent) {
     for(int i = 0; i < indent; ++i) {
         std::cout << "  ";
     }
-    Logger::DebugLog("[TODO]: fix the println below");
-    // std::println("{} ({} | {})", node->m_node.m_value, lexer::get_token_type_name(node->m_node.m_type),
-    //              parser::get_expr_name(node->m_type));
+    // Logger::DebugLog("[TODO]: fix the println below");
+    Logger::DebugLog("{} ({} | {})", node->m_node.m_value, lexer::TokenUtils::get_token_name(node->m_node.m_type),
+                     parser::ExpressionUtils::get_expression_name(node->m_type));
 
     print_ast(node->m_left, indent + 1);
     print_ast(node->m_right, indent + 1);

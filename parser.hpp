@@ -42,7 +42,7 @@ struct Expression {
 };
 
 struct ExpressionUtils {
-    const char* get_expression_name(Expression::Type type) const {
+    static const char* get_expression_name(Expression::Type type) {
         const auto idx = std::to_underlying(type);
         if(idx >= sizeof(s_expr_names) / sizeof(s_expr_names[0])) {
             Logger::DebugWarn("Invalid name for token with idx {}", idx);

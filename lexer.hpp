@@ -88,7 +88,7 @@ class Tokenizer {
 };
 
 struct TokenUtils {
-    const char* get_token_name(Token::Type type) const {
+    static const char* get_token_name(Token::Type type) {
         const auto idx = std::to_underlying(type);
         if(idx >= sizeof(s_token_names) / sizeof(s_token_names[0])) {
             Logger::DebugWarn("Invalid name for token with idx {}", idx);
@@ -96,7 +96,7 @@ struct TokenUtils {
         }
         return s_token_names[idx];
     }
-    const char* get_category_name(Token::Category cat) const {
+    static const char* get_category_name(Token::Category cat) {
         const auto idx = std::to_underlying(cat);
         if(idx >= sizeof(s_category_names) / sizeof(s_category_names[0])) { return s_category_names[0]; }
         return s_category_names[idx];
