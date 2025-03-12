@@ -18,11 +18,19 @@ using literal_t = std::variant<std::monostate, int, double, std::string>;
 
 class Executor;
 
+struct ExpressionResult {
+    using memory_t = std::variant<literal_t*, literal_t>; // literal_t* on m_type == identifier, literal_t on m_type == int,double,string
+    memory_t m_memory;
+    std::vector<literal_t> m_return_values;
+    lexer::Token::Type m_type{};
+};
+
 class ExecutorAllocator {
   public:
     struct StackFrame {
         literal_t& get_allocation(const std::string& var_name);
         literal_t* try_find_allocation(const std::string& var_name);
+        bool m_return_stmn_hit{};
         std::deque<std::pair<std::string, literal_t>> m_variables;
     };
 
@@ -31,13 +39,6 @@ class ExecutorAllocator {
 
     Executor* m_executor{};
     std::deque<StackFrame> m_stack_frames;
-};
-
-struct ExpressionResult {
-    using memory_t = std::variant<literal_t*, literal_t>; // literal_t* on m_type == identifier, literal_t on m_type == int,double,string
-    memory_t m_memory;
-    std::vector<literal_t> m_return_values;
-    lexer::Token::Type m_type{};
 };
 
 class Executor {
@@ -84,7 +85,7 @@ class Expression {
             if(expr->m_right) { dfs_traverse_expr_list(&*expr->m_right, callback); }
         }
     }
-    //static void assign(literal_t& literal, const ExpressionResult& res);
+    // static void assign(literal_t& literal, const ExpressionResult& res);
 
     void assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc);
     static literal_t* get_pmem(ExpressionResult& res) {

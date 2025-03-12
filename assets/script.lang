@@ -7,8 +7,11 @@ func a2() {
 func b1(a) {
 	return a;
 }
-func b2(a, b) {
-	return a, a + b1(b + a2());
+func max(a, b) {
+	if a > b: {
+		return a;
+	}
+	return b;
 }
 
-d,f = a2();
+a = max(1, max(2, 3));

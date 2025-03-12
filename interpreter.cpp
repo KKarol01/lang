@@ -108,13 +108,13 @@ Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr
     m_right = exec->make_expr(expr->m_right);
 }
 
-//void Expression::assign(literal_t& literal, const ExpressionResult& res) {
-//    if(res.m_return_values.empty()) {
-//        literal = *get_pmem(res);
-//        return;
-//    }
-//    literal = res.m_return_values.back();
-//}
+// void Expression::assign(literal_t& literal, const ExpressionResult& res) {
+//     if(res.m_return_values.empty()) {
+//         literal = *get_pmem(res);
+//         return;
+//     }
+//     literal = res.m_return_values.back();
+// }
 
 void Expression::assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc) {
     assert(right->m_return_values.empty());
@@ -246,7 +246,8 @@ ExpressionResult FuncDeclExpression::eval(ExecutorAllocator* alloc) {
 }
 
 ExpressionResult ExprListExpression::eval(ExecutorAllocator* alloc) {
-    m_left->eval(alloc);
+    auto left_res = m_left->eval(alloc);
+    if(alloc->get_top_stack_frame().m_return_stmn_hit) { return left_res; }
     return m_right->eval(alloc);
 }
 
@@ -256,6 +257,7 @@ ExpressionResult ReturnStmntExpression::eval(ExecutorAllocator* alloc) {
     dfs_traverse_expr_list(&*m_left, [&res, alloc](Expression* expr) {
         res.m_return_values.push_back(*get_pmem(expr->eval(alloc)));
     });
+    alloc->get_top_stack_frame().m_return_stmn_hit = true;
     return res;
 #else
     std::vector<literal_t> results;
@@ -351,9 +353,10 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
 
 ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
     auto condition = m_left->eval(alloc);
+    ExpressionResult body_result;
     if(std::get<int>(*get_pmem(condition)) == 1) {
         alloc->m_stack_frames.push_front(alloc->get_top_stack_frame());
-        m_right->eval(alloc);
+        body_result = m_right->eval(alloc);
         auto front = alloc->m_stack_frames.front();
         alloc->m_stack_frames.pop_front();
         for(auto& [name, val] : front.m_variables) {
@@ -361,7 +364,7 @@ ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
             if(palloc) { *palloc = val; }
         }
     }
-    return ExpressionResult{ .m_type = m_expr->m_node.m_type };
+    return body_result;
 }
 
 ExpressionResult LogicalOpExpression::eval(ExecutorAllocator* alloc) {
