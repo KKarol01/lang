@@ -222,12 +222,13 @@ ExpressionResult AssignExpression::eval(ExecutorAllocator* alloc) {
     } else {
         auto ret_vals = m_right->eval(alloc);
         assert(!ret_vals.m_return_values.empty());
-        dfs_traverse_expr_list(&*m_left, [alloc, &ret_vals](Expression* expr) {
+        int ret_idx = 0;
+        dfs_traverse_expr_list(&*m_left, [alloc, &ret_vals, &ret_idx](Expression* expr) {
             assert(expr->get_parse_expr()->m_type == parser::Expression::Type::PRIMARY);
             alloc->get_top_stack_frame().get_allocation(std::string{ expr->get_node_value() }) =
-                ret_vals.m_return_values.front();
-            ret_vals.m_return_values.erase(ret_vals.m_return_values.begin());
+                ret_vals.m_return_values.at(ret_idx++);
         });
+        return ExpressionResult{ .m_memory = literal_t{ ret_vals.m_return_values.back() }, .m_type = m_expr->m_node.m_type };
     }
 }
 
