@@ -51,6 +51,7 @@ struct Token {
         FUNC,
         RETURN,
         IF,
+        ELSE,
     };
 
     std::string m_value;
@@ -103,10 +104,10 @@ struct TokenUtils {
     }
 
     inline static constexpr const char* s_token_names[]{
-        "NONE",  "TERMINATOR", "IDENTIFIER",  "INT",       "DOUBLE", "STRING",   "PLUS_EQUALS",
-        "INC",   "DEC",        "LOGICAL_AND", "AND",       "EQUALS", "MIN",      "PLUS",
-        "MUL",   "DIV",        "PAR_OPEN",    "PAR_CLOSE", "COMMA",  "BRA_OPEN", "BRA_CLOSE",
-        "COLON", "LT",         "GT",          "BREAK",     "FUNC",   "RETURN",   "IF",
+        "NONE",     "TERMINATOR",  "IDENTIFIER", "INT",      "DOUBLE",    "STRING", "PLUS_EQUALS", "INC",
+        "DEC",      "LOGICAL_AND", "AND",        "EQUALS",   "MIN",       "PLUS",   "MUL",         "DIV",
+        "PAR_OPEN", "PAR_CLOSE",   "COMMA",      "BRA_OPEN", "BRA_CLOSE", "COLON",  "LT",          "GT",
+        "BREAK",    "FUNC",        "RETURN",     "IF",       "ELSE",
     };
     inline static constexpr const char* s_category_names[]{
         "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",

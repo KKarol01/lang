@@ -352,9 +352,19 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
 }
 
 ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
+    ++alloc->get_top_stack_frame().m_if_chain_recursion_level;
     auto condition = m_left->eval(alloc);
+
+    if(alloc->get_top_stack_frame().m_prev_if_in_chain_succeded) {
+        --alloc->get_top_stack_frame().m_if_chain_recursion_level;
+        if(alloc->get_top_stack_frame().m_if_chain_recursion_level == 0) {
+            alloc->get_top_stack_frame().m_prev_if_in_chain_succeded = false;
+        }
+        return condition;
+    }
     ExpressionResult body_result;
-    if(std::get<int>(*get_pmem(condition)) == 1) {
+    if(m_right->get_parse_expr()->m_type != parser::Expression::Type::IF_STMNT && std::get<int>(*get_pmem(condition)) == 1) {
+        alloc->get_top_stack_frame().m_prev_if_in_chain_succeded = true;
         alloc->m_stack_frames.push_front(alloc->get_top_stack_frame());
         body_result = m_right->eval(alloc);
         auto front = alloc->m_stack_frames.front();
@@ -364,6 +374,12 @@ ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
             if(palloc) { *palloc = val; }
         }
         alloc->get_top_stack_frame().m_return_stmn_hit = front.m_return_stmn_hit;
+    } else if(m_right->get_parse_expr()->m_type == parser::Expression::Type::IF_STMNT) {
+        body_result = m_right->eval(alloc);
+    }
+    --alloc->get_top_stack_frame().m_if_chain_recursion_level;
+    if(alloc->get_top_stack_frame().m_if_chain_recursion_level == 0) {
+        alloc->get_top_stack_frame().m_prev_if_in_chain_succeded = false;
     }
     return body_result;
 }

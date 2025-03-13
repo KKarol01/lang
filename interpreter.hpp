@@ -31,6 +31,8 @@ class ExecutorAllocator {
         literal_t& get_allocation(const std::string& var_name);
         literal_t* try_find_allocation(const std::string& var_name);
         bool m_return_stmn_hit{};
+        bool m_prev_if_in_chain_succeded{};
+        int m_if_chain_recursion_level{};
         std::deque<std::pair<std::string, literal_t>> m_variables;
     };
 

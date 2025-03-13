@@ -38,6 +38,7 @@ parse_expr_t Parser::parse_prim_expr() {
 }
 
 parse_expr_t Parser::parse_if_expr() {
+
     auto if_kw = parse_prim_expr();
     if(if_kw->m_node.m_type != parse_node_t::Type::IF) { return if_kw; }
     auto if_cond = parse_logical_expr();
@@ -51,7 +52,27 @@ parse_expr_t Parser::parse_if_expr() {
         if_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = if_body, .m_right = right });
     }
     take();
-    insert_terminator();
+
+    if(get().m_type == parse_node_t::Type::ELSE) {
+        take();
+        if(get().m_type != parse_node_t::Type::IF) {
+            // handle else {} by transforming it to: else if 1: {}, so always true else if, that has to be handled anyway
+            assert(get().m_type == parse_node_t::Type::BRA_OPEN); // todo: throw on syntax error: else needs brackets too
+            m_stack.push(parse_node_t{
+                .m_value = ":", .m_type = lexer::Token::Type::COLON, .m_category = lexer::Token::Category::OPERATOR });
+            m_stack.push(parse_node_t{ .m_value = "1", .m_type = lexer::Token::Type::INT, .m_category = lexer::Token::Category::NUMBER });
+            m_stack.push(parse_node_t{ .m_value = "if", .m_type = lexer::Token::Type::IF, .m_category = lexer::Token::Category::KEYWORD });
+        }
+        assert(get().m_type == parse_node_t::Type::IF);
+        auto nested_ifs = parse_if_expr();
+        if_cond = make_expr(Expression{
+            .m_type = Expression::Type::IF_STMNT,
+            .m_left = make_expr(Expression{
+                .m_type = Expression::Type::IF_STMNT, .m_node = if_kw->m_node, .m_left = if_cond, .m_right = if_body }),
+            .m_right = nested_ifs });
+    } else {
+        insert_terminator();
+    }
     return make_expr(Expression{ .m_type = Expression::Type::IF_STMNT, .m_node = if_kw->m_node, .m_left = if_cond, .m_right = if_body });
 }
 
