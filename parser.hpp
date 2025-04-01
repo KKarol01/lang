@@ -34,6 +34,7 @@ struct Expression {
         EXPR_LIST,
         RETURN_STMNT,
         IF_STMNT,
+        FOR_STMNT,
     };
     Type m_type{ Type::NONE };
     parse_node_t m_node{};
@@ -53,7 +54,7 @@ struct ExpressionUtils {
 
     inline static constexpr const char* s_expr_names[]{
         "NONE",   "PRIMARY",         "POSTFIX",    "UNARY",     "MIN",       "MUL",       "DIV",          "ADD",
-        "ASSIGN", "LOGICAL_COMPARE", "LOGICAL_OP", "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT", "IF_STMNT",
+        "ASSIGN", "LOGICAL_COMPARE", "LOGICAL_OP", "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT", "IF_STMNT", "FOR_STMNT",
     };
 };
 
@@ -82,6 +83,7 @@ class Parser {
     parse_expr_t parse_prim_expr();
     parse_expr_t parse_func_expr();
     parse_expr_t parse_if_expr();
+    parse_expr_t parse_for_expr();
     parse_expr_t parse_post_expr();
     parse_expr_t parse_unar_expr();
     parse_expr_t parse_mul_expr();

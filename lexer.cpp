@@ -28,6 +28,7 @@ Tokenizer::Tokenizer() {
     define_keyword(Keyword{ Token::Type::RETURN, "return" });
     define_keyword(Keyword{ Token::Type::IF, "if" });
     define_keyword(Keyword{ Token::Type::ELSE, "else" });
+    define_keyword(Keyword{ Token::Type::FOR, "for" });
 }
 
 void Tokenizer::define_operator(const Operator& op) { m_operators.push_back(op); }

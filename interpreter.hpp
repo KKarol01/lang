@@ -60,6 +60,7 @@ class Executor {
 class Expression {
     friend class FuncCallExpression;
     friend class ReturnStmntExpression;
+    friend class ForStmntExpression;
 
   public:
     Expression(Executor* exec, const parser::parse_expr_t expr);
@@ -190,6 +191,13 @@ class IfStmntExpression final : public Expression {
   public:
     IfStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
     ~IfStmntExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
+};
+
+class ForStmntExpression final : public Expression {
+  public:
+    ForStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~ForStmntExpression() final = default;
     ExpressionResult eval(ExecutorAllocator* alloc) final;
 };
 

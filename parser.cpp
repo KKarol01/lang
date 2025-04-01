@@ -29,7 +29,8 @@ parse_expr_t Parser::parse_prim_expr() {
     auto node = get();
     if(!(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
          node.m_type == parse_node_t::Type::DOUBLE || node.m_type == parse_node_t::Type::STRING ||
-         node.m_type == parse_node_t::Type::FUNC || node.m_type == parse_node_t::Type::IF)) {
+         node.m_type == parse_node_t::Type::FUNC || node.m_type == parse_node_t::Type::IF ||
+         node.m_type == parse_node_t::Type::FOR)) {
         assert(false);
         return nullptr; // todo: maybe throw here
     }
@@ -38,7 +39,6 @@ parse_expr_t Parser::parse_prim_expr() {
 }
 
 parse_expr_t Parser::parse_if_expr() {
-
     auto if_kw = parse_prim_expr();
     if(if_kw->m_node.m_type != parse_node_t::Type::IF) { return if_kw; }
     auto if_cond = parse_logical_expr();
@@ -76,8 +76,42 @@ parse_expr_t Parser::parse_if_expr() {
     return make_expr(Expression{ .m_type = Expression::Type::IF_STMNT, .m_node = if_kw->m_node, .m_left = if_cond, .m_right = if_body });
 }
 
+parse_expr_t Parser::parse_for_expr() {
+    auto for_expr = parse_if_expr();
+    if(for_expr->m_node.m_type != parse_node_t::Type::FOR) { return for_expr; }
+
+    parse_expr_t for_assignments{};
+    while(get().m_type != parse_node_t::Type::TERMINATOR) {
+        for_assignments = make_expr(Expression{
+            .m_type = Expression::Type::EXPR_LIST, .m_left = for_assignments, .m_right = parse_assign_expr() });
+    }
+    take();
+    parse_expr_t logic_expr = parse_logical_expr();
+    assert(get().m_type == parse_node_t::Type::TERMINATOR);
+    take();
+    parse_expr_t it_ops = parse_assign_expr();
+    while(get().m_type != parse_node_t::Type::COLON) {
+        it_ops = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = it_ops, .m_right = parse_assign_expr() });
+    }
+    take();
+    assert(get().m_type == parse_node_t::Type::BRA_OPEN);
+    take();
+    parse_expr_t func_body = parse_statement();
+    while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
+        auto right = parse_statement();
+        func_body = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = func_body, .m_right = right });
+    }
+    take();
+    for_expr->m_type = Expression::Type::FOR_STMNT;
+    for_expr->m_left =
+        make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = for_assignments, .m_right = logic_expr });
+    for_expr->m_right = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = it_ops, .m_right = func_body });
+    insert_terminator();
+    return for_expr;
+}
+
 parse_expr_t Parser::parse_func_expr() {
-    parse_expr_t func_kw = parse_if_expr();
+    parse_expr_t func_kw = parse_for_expr();
     parse_expr_t func_name{};
     parse_expr_t func_param_list{};
     parse_expr_t func_body{};

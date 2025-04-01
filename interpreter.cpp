@@ -79,6 +79,9 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
     case parser::Expression::Type::IF_STMNT: {
         return std::make_unique<IfStmntExpression>(this, expr);
     }
+    case parser::Expression::Type::FOR_STMNT: {
+        return std::make_unique<ForStmntExpression>(this, expr);
+    }
     default: {
         assert(false);
         return nullptr;
@@ -104,8 +107,8 @@ literal_t* ExecutorAllocator::StackFrame::try_find_allocation(const std::string&
 }
 
 Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr(expr) {
-    m_left = exec->make_expr(expr->m_left);
-    m_right = exec->make_expr(expr->m_right);
+    if(expr->m_left) { m_left = exec->make_expr(expr->m_left); }
+    if(expr->m_right) { m_right = exec->make_expr(expr->m_right); }
 }
 
 // void Expression::assign(literal_t& literal, const ExpressionResult& res) {
@@ -426,6 +429,17 @@ ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
         assert(false);
     }
     return ExpressionResult{ .m_memory = literal_t{ res }, .m_type = m_expr->m_node.m_type };
+}
+
+ExpressionResult ForStmntExpression::eval(ExecutorAllocator* alloc) {
+    dfs_traverse_expr_list(&*m_left, [alloc](auto* e) { e->eval(alloc); });
+    ExpressionResult res{};
+    while(std::get<int>(*get_pmem(m_left->m_right->eval(alloc))) > 0) {
+        res = m_right->m_right->eval(alloc);
+        if(alloc->get_top_stack_frame().m_return_stmn_hit) { return res; }
+        m_right->m_left->eval(alloc);
+    }
+    return res;
 }
 
 } // namespace interpreter
