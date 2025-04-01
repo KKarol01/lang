@@ -208,7 +208,8 @@ parse_expr_t Parser::parse_add_expr() {
 
 parse_expr_t Parser::parse_comp_expr() {
     auto left = parse_add_expr();
-    while(get().m_type == parse_node_t::Type::LT || get().m_type == parse_node_t::Type::GT) {
+    while(get().m_type == parse_node_t::Type::LT || get().m_type == parse_node_t::Type::GT ||
+          get().m_type == parse_node_t::Type::EQUALS) {
         auto node = take();
         auto right = parse_add_expr();
         left = make_expr(Expression{ .m_type = Expression::Type::LOGICAL_COMPARE, .m_node = node, .m_left = left, .m_right = right });
@@ -238,7 +239,7 @@ parse_expr_t Parser::parse_expr_list() {
 
 parse_expr_t Parser::parse_assign_expr() {
     auto left = parse_expr_list();
-    while(get().m_type == parse_node_t::Type::EQUALS) {
+    while(get().m_type == parse_node_t::Type::ASSIGN) {
         auto node = take();
         auto right = parse_expr_list();
         left = make_expr(Expression{ .m_type = Expression::Type::ASSIGN, .m_node = node, .m_left = left, .m_right = right });

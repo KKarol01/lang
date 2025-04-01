@@ -424,6 +424,8 @@ ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
         res = (vleft < vright) ? 1 : 0;
     } else if(m_expr->m_node.m_type == lexer::Token::Type::GT) {
         res = (vleft > vright) ? 1 : 0;
+    } else if(m_expr->m_node.m_type == lexer::Token::Type::EQUALS) {
+        res = (vleft == vright) ? 1 : 0;
     } else {
         Logger::DebugWarn("Unhandled comparison operator: {}", get_node_value());
         assert(false);
@@ -434,11 +436,22 @@ ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
 ExpressionResult ForStmntExpression::eval(ExecutorAllocator* alloc) {
     dfs_traverse_expr_list(&*m_left, [alloc](auto* e) { e->eval(alloc); });
     ExpressionResult res{};
+    alloc->m_stack_frames.push_front(alloc->get_top_stack_frame());
+    alloc->get_top_stack_frame().m_if_chain_recursion_level = 0;
+    alloc->get_top_stack_frame().m_prev_if_in_chain_succeded = false;
     while(std::get<int>(*get_pmem(m_left->m_right->eval(alloc))) > 0) {
         res = m_right->m_right->eval(alloc);
-        if(alloc->get_top_stack_frame().m_return_stmn_hit) { return res; }
+        if(alloc->get_top_stack_frame().m_return_stmn_hit) { break; }
         m_right->m_left->eval(alloc);
     }
+    auto front = alloc->m_stack_frames.front();
+    alloc->m_stack_frames.pop_front();
+    for(auto& [name, val] : front.m_variables) {
+        auto* palloc = alloc->get_top_stack_frame().try_find_allocation(name);
+        if(palloc) { *palloc = val; }
+    }
+    alloc->get_top_stack_frame().m_return_stmn_hit = front.m_return_stmn_hit;
+
     return res;
 }
 

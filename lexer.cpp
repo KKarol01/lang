@@ -7,9 +7,10 @@ Tokenizer::Tokenizer() {
     define_operator(Operator{ Token::Type::PLUS_EQUALS, "+=" });
     define_operator(Operator{ Token::Type::INC, "++" });
     define_operator(Operator{ Token::Type::DEC, "--" });
+    define_operator(Operator{ Token::Type::EQUALS, "==" });
     define_operator(Operator{ Token::Type::LOGICAL_AND, "&&" });
     define_operator(Operator{ Token::Type::AND, "&" });
-    define_operator(Operator{ Token::Type::EQUALS, "=" });
+    define_operator(Operator{ Token::Type::ASSIGN, "=" });
     define_operator(Operator{ Token::Type::MIN, "-" });
     define_operator(Operator{ Token::Type::PLUS, "+" });
     define_operator(Operator{ Token::Type::MUL, "*" });

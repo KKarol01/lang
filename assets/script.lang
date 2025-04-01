@@ -5,10 +5,11 @@ func comp(a, b) {
 	} else if a > b: {
 		return 1;
 	} else {
-		for a=10 b = 15; a > -1; ++b: {
-			if b > 7: { return b; }
+		c = 4;
+		for a=0 b=3; a < b; ++a: {
+			c = c;	
 		}
-		return a; 
+		return a + b * c;
 	}
 }
 
