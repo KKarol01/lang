@@ -10,18 +10,18 @@ Application::Application(const std::filesystem::path& _source_code) : source_cod
         return;
     }
 
+    lexer::Tokenizer tokenizer;
     std::vector<lexer::Token> tokens;
     try {
-        lexer::Tokenizer tokenizer;
         tokens = tokenizer.tokenize(source_code);
     } catch(const std::exception& error) {
         Logger::Error("[Tokenizer] {}", error.what());
         return;
     }
 
+    parser::Parser parser{ tokens };
     parser::program_t program;
     try {
-        parser::Parser parser{ tokens };
         program = parser.build_ast();
     } catch(const std::exception& error) {
         Logger::Error("[Parser | AST construction] {}", error.what());

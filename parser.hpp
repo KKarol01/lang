@@ -43,7 +43,6 @@ struct Expression {
     parse_expr_t m_right{};
 };
 
-#ifdef DEBUG_PRINT_INFO
 struct ExpressionUtils {
     static const char* get_expression_name(Expression::Type type) {
         const auto idx = std::to_underlying(type);
@@ -60,7 +59,6 @@ struct ExpressionUtils {
         "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT", "IF_STMNT",        "FOR_STMNT",  "BREAK_STMNT",
     };
 };
-#endif
 
 class Parser {
   public:

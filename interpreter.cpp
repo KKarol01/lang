@@ -88,6 +88,7 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
         return std::make_unique<ForStmntExpression>(this, expr);
     }
     default: {
+        Logger::DebugError("Unrecognized expression type: {}", parser::ExpressionUtils::get_expression_name(expr->m_type));
         assert(false);
         return nullptr;
     }
@@ -121,6 +122,10 @@ void Expression::assign(ExpressionResult* left, const ExpressionResult* right, E
     auto* assigned = get_pmem(*right);
     if(!std::holds_alternative<literal_t*>(left->m_memory)) {
         assert(false);
+        throw std::runtime_error{
+            std::format("[{}] Cannot assign to left-hand side of assign expression, because the memory is null.",
+                        m_expr->m_node.line_number)
+        };
         return;
     }
     *std::get<literal_t*>(left->m_memory) = *assigned;
@@ -141,6 +146,7 @@ ExpressionResult PrimaryExpression::eval(ExecutorAllocator* alloc) {
             value = m_expr->m_node.m_value;
         } else {
             assert(false);
+            throw std::runtime_error{ std::format("[{}] Unrecognized primary expression type.", m_expr->m_node.line_number) };
             return ExpressionResult{};
         }
         return ExpressionResult{ .m_memory = value, .m_type = m_expr->m_node.m_type };
@@ -179,6 +185,9 @@ ExpressionResult AddExpression::eval(ExecutorAllocator* alloc) {
         res.m_memory = literal_t{ std::get<std::string>(*l_mem) + std::get<std::string>(*r_mem) };
     } else {
         assert(false);
+        throw std::runtime_error{ std::format("[{}] Trying to add to unrelated types: {} + {}",
+                                              m_expr->m_node.line_number, lexer::TokenUtils::get_token_name(left.m_type),
+                                              lexer::TokenUtils::get_token_name(right.m_type)) };
     }
     return res;
 }
@@ -195,9 +204,11 @@ ExpressionResult MulExpression::eval(ExecutorAllocator* alloc) {
     } else if(is_int(left) && is_int(right)) {
         res.m_memory = literal_t{ std::get<int>(*l_mem) * std::get<int>(*r_mem) };
     } else if(is_string(left) && is_string(right)) {
-        assert(false);
+        throw std::runtime_error{ std::format("[{}] Trying to multiply strings. This is not allowed.", m_expr->m_node.line_number) };
     } else {
-        assert(false);
+        throw std::runtime_error{ std::format("[{}] Trying to multiply to unrelated types: {} * {}",
+                                              m_expr->m_node.line_number, lexer::TokenUtils::get_token_name(left.m_type),
+                                              lexer::TokenUtils::get_token_name(right.m_type)) };
     }
     return res;
 }
@@ -214,9 +225,11 @@ ExpressionResult DivExpression::eval(ExecutorAllocator* alloc) {
     } else if(is_int(left) && is_int(right)) {
         res.m_memory = literal_t{ std::get<int>(*l_mem) / std::get<int>(*r_mem) };
     } else if(is_string(left) && is_string(right)) {
-        assert(false);
+        throw std::runtime_error{ std::format("[{}] Trying to divide strings. This is not allowed.", m_expr->m_node.line_number) };
     } else {
-        assert(false);
+        throw std::runtime_error{ std::format("[{}] Trying to divide to unrelated types: {} / {}",
+                                              m_expr->m_node.line_number, lexer::TokenUtils::get_token_name(left.m_type),
+                                              lexer::TokenUtils::get_token_name(right.m_type)) };
     }
     return res;
 }
@@ -229,7 +242,12 @@ ExpressionResult AssignExpression::eval(ExecutorAllocator* alloc) {
         return assignee;
     } else {
         auto ret_vals = m_right->eval(alloc);
-        assert(!ret_vals.m_return_values.empty());
+        if(ret_vals.m_return_values.empty()) {
+            assert(false);
+            throw std::runtime_error{ std::format(
+                "[{}] Func call does not return any values and it's result cannot be assigned to the variable {}",
+                m_expr->m_node.line_number, m_expr->m_node.m_value) };
+        }
         int ret_idx = 0;
         dfs_traverse_expr_list(&*m_left, [alloc, &ret_vals, &ret_idx](Expression* expr) {
             assert(expr->get_parse_expr()->m_type == parser::Expression::Type::PRIMARY);
@@ -276,7 +294,6 @@ ExpressionResult FuncCallExpression::eval(ExecutorAllocator* alloc) {
 }
 
 void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, ExecutorAllocator* alloc) {
-#if 1
     ExecutorAllocator::StackFrame sf;
     dfs_traverse(&*func_decl_expr->m_left, [&sf](Expression* expr) {
         if(expr->get_parse_expr()->m_type == parser::Expression::Type::PRIMARY) {
@@ -288,54 +305,6 @@ void FuncCallExpression::transfer_call_args(Expression* func_decl_expr, Executor
         (sf.m_variables.begin() + offset++)->second = *get_pmem(expr->eval(alloc));
     });
     alloc->m_stack_frames.push_front(std::move(sf));
-#else
-    std::stack<Expression*> expr_list_stack;
-    std::stack<Expression*> param_list_stack;
-    std::queue<std::string> param_list_var_names;
-    expr_list_stack.push(&*m_left);
-    param_list_stack.push(&*func_decl_expr->m_left);
-    while(!param_list_stack.empty()) {
-        auto expr = param_list_stack.top();
-        param_list_stack.pop();
-        if(expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) { // for param list with one param
-            param_list_var_names.push(expr->m_expr->m_node.m_value);
-            break;
-        }
-        if(expr->m_right) { param_list_var_names.push(expr->m_right->m_expr->m_node.m_value); }
-        if(expr->m_left) {
-            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
-                param_list_stack.push(&*expr->m_left);
-            } else {
-                param_list_var_names.push(expr->m_left->m_expr->m_node.m_value);
-            }
-        }
-    }
-    ExecutorAllocator::StackFrame stack_frame;
-    while(!expr_list_stack.empty()) {
-        auto expr = expr_list_stack.top();
-        expr_list_stack.pop();
-        if(expr->m_right) {
-            auto& val = *get_pmem(expr->m_right->eval(alloc));
-            stack_frame.get_allocation(param_list_var_names.front()) = val;
-            param_list_var_names.pop();
-        }
-        if(expr->m_left) {
-            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
-                expr_list_stack.push(&*expr->m_left);
-            } else {
-                auto& val = *get_pmem(expr->m_left->eval(alloc));
-                stack_frame.get_allocation(param_list_var_names.front()) = val;
-                param_list_var_names.pop();
-            }
-        }
-        if(!expr->m_left && !expr->m_right && expr->m_expr->m_type != parser::Expression::Type::EXPR_LIST) {
-            auto& val = *get_pmem(expr->eval(alloc)); // todo: else above probably is dead code
-            stack_frame.get_allocation(param_list_var_names.front()) = val;
-            param_list_var_names.pop();
-        }
-    }
-    alloc->m_stack_frames.push_front(std::move(stack_frame));
-#endif
 }
 
 ExpressionResult IfStmntExpression::eval(ExecutorAllocator* alloc) {
@@ -376,6 +345,8 @@ ExpressionResult LogicalOpExpression::eval(ExecutorAllocator* alloc) {
     auto right = m_right->eval(alloc);
     if(!(is_int(left) && is_int(right))) {
         assert(false);
+        throw std::runtime_error{ std::format("[{}] Operands of logical expression {} should both evaluate to ints",
+                                              m_expr->m_node.line_number, m_expr->m_node.m_value) };
         return ExpressionResult{ .m_memory = literal_t{ 0 }, .m_type = m_expr->m_node.m_type };
     }
 

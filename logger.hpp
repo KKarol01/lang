@@ -17,6 +17,12 @@ class Logger {
 #endif
     }
 
+    template <typename... Args> static void DebugError(std::string_view msg, const Args&... args) {
+#ifndef NDEBUG
+        std::println("{}", format_msg("[Error] {}", msg, args...));
+#endif
+    }
+
     template <typename... Args> static void Warn(std::string_view msg, const Args&... args) {
         std::println("{}", format_msg("[WARN] {}", msg, args...));
     }
