@@ -287,6 +287,10 @@ ExpressionResult BreakStmntExpression::eval(ExecutorAllocator* alloc) {
 
 ExpressionResult FuncCallExpression::eval(ExecutorAllocator* alloc) {
     auto* func_decl = alloc->m_executor->get_func_decl(m_expr->m_node.m_value);
+    if(!func_decl) {
+        throw std::runtime_error{ std::format("[{}] Function {} is not defined.", m_expr->m_node.line_number,
+                                              m_expr->m_node.m_value) };
+    }
     transfer_call_args(func_decl, alloc);
     auto ret_values = func_decl->m_right->eval(alloc);
     alloc->m_stack_frames.pop_front();

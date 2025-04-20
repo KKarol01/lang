@@ -49,7 +49,10 @@ class Executor {
     Executor(const parser::program_t& p);
 
     exec_expr_t make_expr(const parser::parse_expr_t expr);
-    Expression* get_func_decl(const std::string& name) { return &*m_func_decls.at(name); }
+    Expression* get_func_decl(const std::string& name) {
+        if(auto it = m_func_decls.find(name); it != m_func_decls.end()) { return &*it->second; }
+        return nullptr;
+    }
 
   private:
     parser::program_t m_program;

@@ -28,4 +28,4 @@ for b = 1; b < 3; ++b: {
 
 a = "absdfa1";
 c = "absdfa1";
-b = a == c;
+b = "a" * 2;
