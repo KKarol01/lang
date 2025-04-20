@@ -397,9 +397,11 @@ ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
     const auto is_any_string = is_string(left) || is_string(right);
     const auto is_any_not_string = !is_string(left) || !is_string(right);
     if(is_any_string && is_any_not_string) {
-        Logger::Warn("Trying to compare number with string or string with string: {} {} {}", m_left->get_node_value(),
-                     get_node_value(), m_right->get_node_value());
-        assert(false); // todo: probably throw
+        assert(false);
+        throw std::runtime_error{
+            std::format("[{}] Trying to compare number with string or string with string: {} {} {}",
+                        m_expr->m_node.line_number, m_left->get_node_value(), get_node_value(), m_right->get_node_value())
+        };
         return ExpressionResult{ .m_memory = literal_t{ 0 }, .m_type = m_expr->m_node.m_type };
     }
 

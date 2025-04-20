@@ -27,5 +27,5 @@ for b = 1; b < 3; ++b: {
 
 
 a = "absdfa1";
-c = "absdfa";
+c = "absdfa1"1;
 b = a == c;

@@ -59,6 +59,7 @@ struct Token {
     std::string m_value;
     Type m_type{ Type::NONE };
     Category m_category{ Category::NONE };
+    uint32_t line_number{ ~0ul };
 };
 
 struct Operator {
@@ -90,7 +91,6 @@ class Tokenizer {
     std::vector<Keyword> m_keywords;
 };
 
-#ifdef DEBUG_PRINT_INFO
 struct TokenUtils {
     static const char* get_token_name(Token::Type type) {
         const auto idx = std::to_underlying(type);
@@ -116,6 +116,5 @@ struct TokenUtils {
         "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",
     };
 };
-#endif
 
 } // namespace lexer

@@ -81,6 +81,7 @@ class Parser {
         m_stack.pop();
         return top;
     }
+    void check_or_throw(parse_node_t::Type expected, bool take = false);
     parse_expr_t make_expr() { return &m_ast.emplace_back(); }
     parse_expr_t make_expr(const Expression& expr) { return &m_ast.emplace_back(expr); }
 

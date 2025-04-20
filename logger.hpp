@@ -21,6 +21,10 @@ class Logger {
         std::println("{}", format_msg("[WARN] {}", msg, args...));
     }
 
+    template <typename... Args> static void Error(std::string_view msg, const Args&... args) {
+        std::println("{}", format_msg("[Error] {}", msg, args...));
+    }
+
   private:
     template <typename... Args>
     static std::string format_msg(std::string_view prefix, std::string_view msg, const Args&... args) {

@@ -25,6 +25,16 @@ void Parser::insert_terminator() {
     m_stack.push(parse_node_t{ .m_value = ";", .m_type = lexer::Token::Type::TERMINATOR, .m_category = lexer::Token::Category::TERMINATOR });
 }
 
+void Parser::check_or_throw(parse_node_t::Type expected, bool take) {
+    if(get().m_type != expected) {
+        assert(false);
+        throw std::runtime_error{ std::format("[{}] Expected {}, but got {}", get().line_number,
+                                              lexer::TokenUtils::get_token_name(expected),
+                                              lexer::TokenUtils::get_token_name(get().m_type)) };
+    }
+    if(take) { this->take(); }
+}
+
 parse_expr_t Parser::parse_prim_expr() {
     auto node = get();
     if(!(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
@@ -34,7 +44,7 @@ parse_expr_t Parser::parse_prim_expr() {
         assert(false);
         return nullptr; // todo: maybe throw here
     }
-    m_stack.pop();
+    take();
     return make_expr(Expression{ .m_type = Expression::Type::PRIMARY, .m_node = node });
 }
 
@@ -42,10 +52,8 @@ parse_expr_t Parser::parse_if_expr() {
     auto if_kw = parse_prim_expr();
     if(if_kw->m_node.m_type != parse_node_t::Type::IF) { return if_kw; }
     auto if_cond = parse_logical_expr();
-    assert(get().m_type == parse_node_t::Type::COLON);
-    take();
-    assert(get().m_type == parse_node_t::Type::BRA_OPEN);
-    take();
+    check_or_throw(parse_node_t::Type::COLON, true);
+    check_or_throw(parse_node_t::Type::BRA_OPEN, true);
     auto if_body = parse_statement();
     while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
         auto right = parse_statement();
@@ -57,13 +65,13 @@ parse_expr_t Parser::parse_if_expr() {
         take();
         if(get().m_type != parse_node_t::Type::IF) {
             // handle else {} by transforming it to: else if 1: {}, so always true else if, that has to be handled anyway
-            assert(get().m_type == parse_node_t::Type::BRA_OPEN); // todo: throw on syntax error: else needs brackets too
+            check_or_throw(parse_node_t::Type::BRA_OPEN);
             m_stack.push(parse_node_t{
                 .m_value = ":", .m_type = lexer::Token::Type::COLON, .m_category = lexer::Token::Category::OPERATOR });
             m_stack.push(parse_node_t{ .m_value = "1", .m_type = lexer::Token::Type::INT, .m_category = lexer::Token::Category::NUMBER });
             m_stack.push(parse_node_t{ .m_value = "if", .m_type = lexer::Token::Type::IF, .m_category = lexer::Token::Category::KEYWORD });
         }
-        assert(get().m_type == parse_node_t::Type::IF);
+        check_or_throw(parse_node_t::Type::IF);
         auto nested_ifs = parse_if_expr();
         if_cond = make_expr(Expression{
             .m_type = Expression::Type::IF_STMNT,
@@ -87,15 +95,13 @@ parse_expr_t Parser::parse_for_expr() {
     }
     take();
     parse_expr_t logic_expr = parse_logical_expr();
-    assert(get().m_type == parse_node_t::Type::TERMINATOR);
-    take();
+    check_or_throw(parse_node_t::Type::TERMINATOR, true);
     parse_expr_t it_ops = parse_assign_expr();
     while(get().m_type != parse_node_t::Type::COLON) {
         it_ops = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST, .m_left = it_ops, .m_right = parse_assign_expr() });
     }
     take();
-    assert(get().m_type == parse_node_t::Type::BRA_OPEN);
-    take();
+    check_or_throw(parse_node_t::Type::BRA_OPEN, true);
     parse_expr_t func_body = parse_statement();
     while(get().m_type != parse_node_t::Type::BRA_CLOSE) {
         auto right = parse_statement();
@@ -116,7 +122,7 @@ parse_expr_t Parser::parse_func_expr() {
     parse_expr_t func_param_list{};
     parse_expr_t func_body{};
     if(func_kw->m_node.m_type == parse_node_t::Type::FUNC) {
-        assert(get().m_type == parse_node_t::Type::IDENTIFIER);
+        check_or_throw(parse_node_t::Type::IDENTIFIER);
         func_name = parse_prim_expr();
     } else if(func_kw->m_node.m_type == parse_node_t::Type::IDENTIFIER && get().m_type == parse_node_t::Type::PAR_OPEN) {
         func_name = func_kw;
@@ -124,15 +130,13 @@ parse_expr_t Parser::parse_func_expr() {
         return func_kw;
     }
 
-    assert(get().m_type == parse_node_t::Type::PAR_OPEN);
-    take();
+    check_or_throw(parse_node_t::Type::PAR_OPEN, true);
     if(get().m_type == parse_node_t::Type::PAR_CLOSE) {
         func_param_list = make_expr(Expression{ .m_type = Expression::Type::EXPR_LIST });
     } else {
         func_param_list = parse_expr_list();
     }
-    assert(get().m_type == parse_node_t::Type::PAR_CLOSE);
-    take();
+    check_or_throw(parse_node_t::Type::PAR_CLOSE, true);
 
     parse_expr_t func_expr{};
     if(get().m_type == parse_node_t::Type::BRA_OPEN) {
@@ -268,8 +272,7 @@ parse_expr_t Parser::parse_break_statement() {
 
 parse_expr_t Parser::parse_statement() {
     auto list = parse_break_statement();
-    assert(get().m_type == parse_node_t::Type::TERMINATOR);
-    take();
+    check_or_throw(parse_node_t::Type::TERMINATOR, true);
     return list;
 }
 

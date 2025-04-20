@@ -38,8 +38,10 @@ void Tokenizer::define_keyword(const Keyword& op) { m_keywords.push_back(op); }
 
 std::vector<Token> Tokenizer::tokenize(std::string_view code) const {
     std::vector<Token> tokens;
+    uint32_t current_line = 1;
     for(auto i = 0u; i < code.size(); ++i) {
-        Token token{ .m_category = deduce_token_category(code.substr(i, 1)) };
+        if(code.at(i) == '\n') { ++current_line; };
+        Token token{ .m_category = deduce_token_category(code.substr(i, 1)), .line_number = current_line };
         if(token.m_category == Token::Category::NONE) { continue; }
         for(auto j = 1; j < code.size(); ++j) {
             if(token.m_category == Token::Category::STRING && code.at(i + j) != '"') { continue; }
@@ -127,7 +129,9 @@ void Tokenizer::deduce_token_type(Token& token) const {
             token.m_type = type->m_type;
             return;
         }
-        assert(false); // todo: consider throwing here
+        assert(false);
+        throw std::runtime_error{ std::format("[{}]: No operator \"{}\" is defined. That's syntax error.",
+                                              token.line_number, token.m_value) };
         return;
     }
     case Token::Category::TERMINATOR: {
@@ -136,6 +140,8 @@ void Tokenizer::deduce_token_type(Token& token) const {
     }
     default: {
         assert(false);
+        throw std::runtime_error{ std::format("[{}]: Unrecognized token category for token \"{}\". That's an error.",
+                                              token.line_number, token.m_value) };
     }
     }
 }
