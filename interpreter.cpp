@@ -18,6 +18,7 @@ Executor::Executor(const parser::program_t& p) : m_program(p), m_alloc(this) {
             m_exprs.back()->eval(&m_alloc);
         }
 
+#ifdef DEBUG_PRINT_INFO
         std::println("[Stack variables]");
         for(auto& ms : m_alloc.get_top_stack_frame().m_variables) {
             std::string type_name;
@@ -33,6 +34,7 @@ Executor::Executor(const parser::program_t& p) : m_program(p), m_alloc(this) {
                 // std::println("[{} | {}] : {}", "", "VOID");
             }
         }
+#endif
     }
     m_alloc.m_stack_frames.pop_front();
 }
@@ -63,6 +65,9 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
     }
     case parser::Expression::Type::RETURN_STMNT: {
         return std::make_unique<ReturnStmntExpression>(this, expr);
+    }
+    case parser::Expression::Type::BREAK_STMNT: {
+        return std::make_unique<BreakStmntExpression>(this, expr);
     }
     case parser::Expression::Type::UNARY: {
         return std::make_unique<UnaryExpression>(this, expr);
@@ -110,14 +115,6 @@ Expression::Expression(Executor* exec, const parser::parse_expr_t expr) : m_expr
     if(expr->m_left) { m_left = exec->make_expr(expr->m_left); }
     if(expr->m_right) { m_right = exec->make_expr(expr->m_right); }
 }
-
-// void Expression::assign(literal_t& literal, const ExpressionResult& res) {
-//     if(res.m_return_values.empty()) {
-//         literal = *get_pmem(res);
-//         return;
-//     }
-//     literal = res.m_return_values.back();
-// }
 
 void Expression::assign(ExpressionResult* left, const ExpressionResult* right, ExecutorAllocator* alloc) {
     assert(right->m_return_values.empty());
@@ -250,37 +247,24 @@ ExpressionResult FuncDeclExpression::eval(ExecutorAllocator* alloc) {
 
 ExpressionResult ExprListExpression::eval(ExecutorAllocator* alloc) {
     auto left_res = m_left->eval(alloc);
-    if(alloc->get_top_stack_frame().m_return_stmn_hit) { return left_res; }
+    if(alloc->get_top_stack_frame().m_return_stmn_hit || alloc->get_top_stack_frame().m_break_stmn_hit) {
+        return left_res;
+    }
     return m_right->eval(alloc);
 }
 
 ExpressionResult ReturnStmntExpression::eval(ExecutorAllocator* alloc) {
-#if 1
     ExpressionResult res{ .m_type = m_expr->m_node.m_type };
     dfs_traverse_expr_list(&*m_left, [&res, alloc](Expression* expr) {
         res.m_return_values.push_back(*get_pmem(expr->eval(alloc)));
     });
     alloc->get_top_stack_frame().m_return_stmn_hit = true;
     return res;
-#else
-    std::vector<literal_t> results;
-    std::stack<Expression*> expr_list_stack;
-    expr_list_stack.push(&*m_left);
-    while(!expr_list_stack.empty()) {
-        auto expr = expr_list_stack.top();
-        expr_list_stack.pop();
-        if(expr->m_left) {
-            if(expr->m_left->m_expr->m_type == parser::Expression::Type::EXPR_LIST) {
-                expr_list_stack.push(&*expr->m_left);
-            } else {
-                results.push_back(*get_pmem(expr->m_left->eval(alloc)));
-            }
-        }
-        if(!expr->m_left && !expr->m_right) { results.push_back(*get_pmem(expr->eval(alloc))); }
-        if(expr->m_right) { results.push_back(*get_pmem(expr->m_right->eval(alloc))); }
-    }
-    return ExpressionResult{ .m_return_values = { results.rbegin(), results.rend() }, .m_type = m_expr->m_node.m_type };
-#endif
+}
+
+ExpressionResult BreakStmntExpression::eval(ExecutorAllocator* alloc) {
+    alloc->get_top_stack_frame().m_break_stmn_hit = true;
+    return ExpressionResult{ .m_type = m_expr->m_node.m_type };
 }
 
 ExpressionResult FuncCallExpression::eval(ExecutorAllocator* alloc) {
@@ -410,27 +394,39 @@ ExpressionResult LogicalOpExpression::eval(ExecutorAllocator* alloc) {
 ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
     auto left = m_left->eval(alloc);
     auto right = m_right->eval(alloc);
-    if(!(is_int(left) || is_double(left)) && !(is_double(right) || is_double(right))) {
-        Logger::DebugWarn("Trying to compare number with string or string with string: {} {} {}",
-                          m_left->get_node_value(), get_node_value(), m_right->get_node_value());
+    const auto is_any_string = is_string(left) || is_string(right);
+    const auto is_any_not_string = !is_string(left) || !is_string(right);
+    if(is_any_string && is_any_not_string) {
+        Logger::Warn("Trying to compare number with string or string with string: {} {} {}", m_left->get_node_value(),
+                     get_node_value(), m_right->get_node_value());
         assert(false); // todo: probably throw
         return ExpressionResult{ .m_memory = literal_t{ 0 }, .m_type = m_expr->m_node.m_type };
     }
 
-    double vleft = is_int(left) ? std::get<int>(*get_pmem(left)) : std::get<double>(*get_pmem(left));
-    double vright = is_int(right) ? std::get<int>(*get_pmem(right)) : std::get<double>(*get_pmem(right));
-    int res = 0;
-    if(m_expr->m_node.m_type == lexer::Token::Type::LT) {
-        res = (vleft < vright) ? 1 : 0;
-    } else if(m_expr->m_node.m_type == lexer::Token::Type::GT) {
-        res = (vleft > vright) ? 1 : 0;
-    } else if(m_expr->m_node.m_type == lexer::Token::Type::EQUALS) {
-        res = (vleft == vright) ? 1 : 0;
+    const auto compare = [this](lexer::Token::Type type, const auto& a, const auto& b) {
+        if(type == lexer::Token::Type::LT) {
+            return a < b;
+        } else if(type == lexer::Token::Type::GT) {
+            return a > b;
+        } else if(type == lexer::Token::Type::EQUALS) {
+            return a == b;
+        } else {
+            Logger::DebugWarn("Unhandled comparison operator: {}", get_node_value());
+            assert(false);
+            return false;
+        }
+    };
+
+    ExpressionResult result{ .m_type = m_expr->m_node.m_type };
+    if(!is_any_not_string) {
+        result.m_memory = literal_t{ compare(m_expr->m_node.m_type, std::get<std::string>(*get_pmem(left)),
+                                             std::get<std::string>(*get_pmem(right))) };
     } else {
-        Logger::DebugWarn("Unhandled comparison operator: {}", get_node_value());
-        assert(false);
+        double vleft = is_int(left) ? std::get<int>(*get_pmem(left)) : std::get<double>(*get_pmem(left));
+        double vright = is_int(right) ? std::get<int>(*get_pmem(right)) : std::get<double>(*get_pmem(right));
+        result.m_memory = literal_t{ compare(m_expr->m_node.m_type, vleft, vright) };
     }
-    return ExpressionResult{ .m_memory = literal_t{ res }, .m_type = m_expr->m_node.m_type };
+    return result;
 }
 
 ExpressionResult ForStmntExpression::eval(ExecutorAllocator* alloc) {
@@ -441,7 +437,7 @@ ExpressionResult ForStmntExpression::eval(ExecutorAllocator* alloc) {
     alloc->get_top_stack_frame().m_prev_if_in_chain_succeded = false;
     while(std::get<int>(*get_pmem(m_left->m_right->eval(alloc))) > 0) {
         res = m_right->m_right->eval(alloc);
-        if(alloc->get_top_stack_frame().m_return_stmn_hit) { break; }
+        if(alloc->get_top_stack_frame().m_return_stmn_hit || alloc->get_top_stack_frame().m_break_stmn_hit) { break; }
         m_right->m_left->eval(alloc);
     }
     auto front = alloc->m_stack_frames.front();

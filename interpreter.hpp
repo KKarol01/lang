@@ -31,6 +31,7 @@ class ExecutorAllocator {
         literal_t& get_allocation(const std::string& var_name);
         literal_t* try_find_allocation(const std::string& var_name);
         bool m_return_stmn_hit{};
+        bool m_break_stmn_hit{};
         bool m_prev_if_in_chain_succeded{};
         int m_if_chain_recursion_level{};
         std::deque<std::pair<std::string, literal_t>> m_variables;
@@ -101,9 +102,9 @@ class Expression {
         return std::holds_alternative<literal_t>(res.m_memory) ? &std::get<literal_t>(res.m_memory)
                                                                : std::get<literal_t*>(res.m_memory);
     }
-    bool is_int(const ExpressionResult& res) const { return std::holds_alternative<int>(*get_pmem(res)); }
-    bool is_double(const ExpressionResult& res) const { return std::holds_alternative<double>(*get_pmem(res)); }
-    bool is_string(const ExpressionResult& res) const { return std::holds_alternative<std::string>(*get_pmem(res)); }
+    static bool is_int(const ExpressionResult& res) { return std::holds_alternative<int>(*get_pmem(res)); }
+    static bool is_double(const ExpressionResult& res) { return std::holds_alternative<double>(*get_pmem(res)); }
+    static bool is_string(const ExpressionResult& res) { return std::holds_alternative<std::string>(*get_pmem(res)); }
 
     exec_expr_t m_left{};
     exec_expr_t m_right{};
@@ -174,6 +175,13 @@ class ReturnStmntExpression final : public Expression {
   public:
     ReturnStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
     ~ReturnStmntExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
+};
+
+class BreakStmntExpression final : public Expression {
+  public:
+    BreakStmntExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~BreakStmntExpression() final = default;
     ExpressionResult eval(ExecutorAllocator* alloc) final;
 };
 

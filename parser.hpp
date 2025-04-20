@@ -35,6 +35,7 @@ struct Expression {
         RETURN_STMNT,
         IF_STMNT,
         FOR_STMNT,
+        BREAK_STMNT,
     };
     Type m_type{ Type::NONE };
     parse_node_t m_node{};
@@ -42,6 +43,7 @@ struct Expression {
     parse_expr_t m_right{};
 };
 
+#ifdef DEBUG_PRINT_INFO
 struct ExpressionUtils {
     static const char* get_expression_name(Expression::Type type) {
         const auto idx = std::to_underlying(type);
@@ -53,10 +55,12 @@ struct ExpressionUtils {
     }
 
     inline static constexpr const char* s_expr_names[]{
-        "NONE",   "PRIMARY",         "POSTFIX",    "UNARY",     "MIN",       "MUL",       "DIV",          "ADD",
-        "ASSIGN", "LOGICAL_COMPARE", "LOGICAL_OP", "FUNC_DECL", "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT", "IF_STMNT", "FOR_STMNT",
+        "NONE",      "PRIMARY",   "POSTFIX",      "UNARY",           "MIN",        "MUL",
+        "DIV",       "ADD",       "ASSIGN",       "LOGICAL_COMPARE", "LOGICAL_OP", "FUNC_DECL",
+        "FUNC_CALL", "EXPR_LIST", "RETURN_STMNT", "IF_STMNT",        "FOR_STMNT",  "BREAK_STMNT",
     };
 };
+#endif
 
 class Parser {
   public:
@@ -94,6 +98,7 @@ class Parser {
     parse_expr_t parse_expr_list();
     parse_expr_t parse_expr();
     parse_expr_t parse_return_statement();
+    parse_expr_t parse_break_statement();
     parse_expr_t parse_statement();
 
     program_t m_program;

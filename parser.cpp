@@ -30,7 +30,7 @@ parse_expr_t Parser::parse_prim_expr() {
     if(!(node.m_type == parse_node_t::Type::IDENTIFIER || node.m_type == parse_node_t::Type::INT ||
          node.m_type == parse_node_t::Type::DOUBLE || node.m_type == parse_node_t::Type::STRING ||
          node.m_type == parse_node_t::Type::FUNC || node.m_type == parse_node_t::Type::IF ||
-         node.m_type == parse_node_t::Type::FOR)) {
+         node.m_type == parse_node_t::Type::FOR || node.m_type == parse_node_t::Type::BREAK)) {
         assert(false);
         return nullptr; // todo: maybe throw here
     }
@@ -258,25 +258,35 @@ parse_expr_t Parser::parse_return_statement() {
     return parse_assign_expr();
 }
 
+parse_expr_t Parser::parse_break_statement() {
+    if(get().m_type == lexer::Token::Type::BREAK) {
+        auto ret = take();
+        return make_expr(Expression{ .m_type = Expression::Type::BREAK_STMNT, .m_node = ret });
+    }
+    return parse_return_statement();
+}
+
 parse_expr_t Parser::parse_statement() {
-    auto list = parse_return_statement();
+    auto list = parse_break_statement();
     assert(get().m_type == parse_node_t::Type::TERMINATOR);
     take();
     return list;
 }
 
 void print_ast(const parser::parse_expr_t node, int indent) {
+#ifdef DEBUG_PRINT_INFO
     if(node == nullptr) { return; }
 
     for(int i = 0; i < indent; ++i) {
         std::cout << "  ";
     }
-    // Logger::DebugLog("[TODO]: fix the println below");
+
     Logger::DebugLog("{} ({} | {})", node->m_node.m_value, lexer::TokenUtils::get_token_name(node->m_node.m_type),
                      parser::ExpressionUtils::get_expression_name(node->m_type));
 
     print_ast(node->m_left, indent + 1);
     print_ast(node->m_right, indent + 1);
+#endif
 }
 
 } // namespace parser
