@@ -139,6 +139,13 @@ class AddExpression final : public Expression {
     ExpressionResult eval(ExecutorAllocator* alloc) final;
 };
 
+class SubExpression final : public Expression {
+  public:
+    SubExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~SubExpression() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
+};
+
 class MulExpression final : public Expression {
   public:
     MulExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}

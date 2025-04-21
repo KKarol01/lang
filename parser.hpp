@@ -22,7 +22,7 @@ struct Expression {
         PRIMARY,
         POSTFIX,
         UNARY,
-        MIN,
+        SUB,
         MUL,
         DIV,
         ADD,
@@ -55,7 +55,7 @@ struct ExpressionUtils {
     }
 
     inline static constexpr const char* s_expr_names[]{
-        "NONE",         "PRIMARY",  "POSTFIX",         "UNARY",       "MIN",         "MUL",       "DIV",
+        "NONE",         "PRIMARY",  "POSTFIX",         "UNARY",       "SUB",         "MUL",       "DIV",
         "ADD",          "ASSIGN",   "LOGICAL_COMPARE", "LOGICAL_OP",  "FUNC_DECL",   "FUNC_CALL", "EXPR_LIST",
         "RETURN_STMNT", "IF_STMNT", "FOR_STMNT",       "BREAK_STMNT", "PRINT_STMNT",
     };

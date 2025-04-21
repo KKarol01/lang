@@ -57,6 +57,9 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
     case parser::Expression::Type::ADD: {
         return std::make_unique<AddExpression>(this, expr);
     }
+    case parser::Expression::Type::SUB: {
+        return std::make_unique<SubExpression>(this, expr);
+    }
     case parser::Expression::Type::MUL: {
         return std::make_unique<MulExpression>(this, expr);
     }
@@ -189,6 +192,28 @@ ExpressionResult AddExpression::eval(ExecutorAllocator* alloc) {
     } else {
         assert(false);
         throw std::runtime_error{ std::format("[{}] Trying to add to unrelated types: {} + {}",
+                                              m_expr->m_node.line_number, lexer::TokenUtils::get_token_name(left.m_type),
+                                              lexer::TokenUtils::get_token_name(right.m_type)) };
+    }
+    return res;
+}
+
+ExpressionResult SubExpression::eval(ExecutorAllocator* alloc) {
+    auto left = m_left->eval(alloc);
+    auto right = m_right->eval(alloc);
+    auto l_mem = get_pmem(left);
+    auto r_mem = get_pmem(right);
+    ExpressionResult res{ .m_type = m_expr->m_node.m_type };
+    if((is_int(left) && is_double(right)) || (is_int(right) && is_double(left)) || (is_double(left) && is_double(right))) {
+        res.m_memory = literal_t{ (double)(is_int(left) ? std::get<int>(*l_mem) : std::get<double>(*l_mem)) +
+                                  (double)(is_int(right) ? std::get<int>(*r_mem) : std::get<double>(*r_mem)) };
+    } else if(is_int(left) && is_int(right)) {
+        res.m_memory = literal_t{ std::get<int>(*l_mem) - std::get<int>(*r_mem) };
+    } else if(is_string(left) && is_string(right)) {
+        throw std::runtime_error{ std::format("[{}] Trying to subtract strings. This is not allowed.", m_expr->m_node.line_number) };
+    } else {
+        assert(false);
+        throw std::runtime_error{ std::format("[{}] Trying to subtract to unrelated types: {} - {}",
                                               m_expr->m_node.line_number, lexer::TokenUtils::get_token_name(left.m_type),
                                               lexer::TokenUtils::get_token_name(right.m_type)) };
     }

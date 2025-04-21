@@ -205,7 +205,10 @@ parse_expr_t Parser::parse_add_expr() {
     while(get().m_type == parse_node_t::Type::PLUS || get().m_type == parse_node_t::Type::MIN) {
         auto node = take();
         auto right = parse_mul_expr();
-        left = make_expr(Expression{ .m_type = Expression::Type::ADD, .m_node = node, .m_left = left, .m_right = right });
+        left = make_expr(Expression{ .m_type = node.m_type == parse_node_t::Type::PLUS ? Expression::Type::ADD : Expression::Type::SUB,
+                                     .m_node = node,
+                                     .m_left = left,
+                                     .m_right = right });
     }
     return left;
 }
