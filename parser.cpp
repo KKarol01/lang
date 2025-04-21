@@ -42,6 +42,7 @@ parse_expr_t Parser::parse_prim_expr() {
          node.m_type == parse_node_t::Type::FUNC || node.m_type == parse_node_t::Type::IF ||
          node.m_type == parse_node_t::Type::FOR || node.m_type == parse_node_t::Type::BREAK)) {
         assert(false);
+        throw std::runtime_error{ std::format("[{}] Unrecognized primary expression {}.", node.line_number, node.m_value) };
         return nullptr; // todo: maybe throw here
     }
     take();

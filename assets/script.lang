@@ -7,12 +7,37 @@ func comp(a, b) {
 	} else {
 		for a=0 b=3; a < b; ++a: {
 			if a + 1 == b: {
-				return b - a;
+				return b - a - 2 + 1;
 			}
 		}
 	}
 }
 
-a = 2 - -1;
+a = comp(1, 2);
 b = comp(2, 2);
+c = comp(3, 2);
+
+print("a: ", a);
 print("b: ", b);
+print("c: ", c);
+
+func comp() {
+	return "str: 1", 2 * -5;
+}
+
+a, b = comp();
+print("a and b after function replace: '", a, "' '", b, "'");
+
+a = 0;
+for b = 1; b < 3; ++b: {
+	++a;
+	if b == 2: {
+		break;
+	}
+}
+print(a);
+
+a = "absdfa1";
+c = "absdfa1";
+print("Is a == c? ", a == c);
+a * c;
