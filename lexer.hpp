@@ -32,6 +32,9 @@ struct Token {
         INC,
         DEC,
         EQUALS,
+        NOT_EQUALS,
+        GEQ,
+        LEQ,
         LOGICAL_AND,
         AND,
         ASSIGN,
@@ -47,6 +50,7 @@ struct Token {
         COLON,
         LT,
         GT,
+        NOT,
 
         BREAK,
         FUNC,
@@ -54,6 +58,7 @@ struct Token {
         IF,
         ELSE,
         FOR,
+        PRINT,
     };
 
     std::string m_value;
@@ -107,10 +112,10 @@ struct TokenUtils {
     }
 
     inline static constexpr const char* s_token_names[]{
-        "NONE", "TERMINATOR", "IDENTIFIER",  "INT",    "DOUBLE",   "STRING",    "PLUS_EQUALS", "INC",
-        "DEC",  "EQUALS",     "LOGICAL_AND", "AND",    "ASSIGN",   "MIN",       "PLUS",        "MUL",
-        "DIV",  "PAR_OPEN",   "PAR_CLOSE",   "COMMA",  "BRA_OPEN", "BRA_CLOSE", "COLON",       "LT",
-        "GT",   "BREAK",      "FUNC",        "RETURN", "IF",       "ELSE",      "FOR",
+        "NONE",   "TERMINATOR", "IDENTIFIER", "INT",       "DOUBLE",      "STRING",   "PLUS_EQUALS", "INC",   "DEC",
+        "EQUALS", "NOT_EQUALS", "GEQ",        "LEQ",       "LOGICAL_AND", "AND",      "ASSIGN",      "MIN",   "PLUS",
+        "MUL",    "DIV",        "PAR_OPEN",   "PAR_CLOSE", "COMMA",       "BRA_OPEN", "BRA_CLOSE",   "COLON", "LT",
+        "GT",     "NOT",        "BREAK",      "FUNC",      "RETURN",      "IF",       "ELSE",        "FOR",   "PRINT",
     };
     inline static constexpr const char* s_category_names[]{
         "NONE", "TERMINATOR", "UNRESOLVED", "VARIABLE", "NUMBER", "STRING", "OPERATOR", "KEYWORD",

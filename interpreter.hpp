@@ -212,6 +212,13 @@ class ForStmntExpression final : public Expression {
     ExpressionResult eval(ExecutorAllocator* alloc) final;
 };
 
+class PrintStmnt final : public Expression {
+  public:
+    PrintStmnt(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}
+    ~PrintStmnt() final = default;
+    ExpressionResult eval(ExecutorAllocator* alloc) final;
+};
+
 class LogicalOpExpression final : public Expression {
   public:
     LogicalOpExpression(Executor* exec, const parser::parse_expr_t expr) : Expression(exec, expr) {}

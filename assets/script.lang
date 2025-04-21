@@ -29,3 +29,6 @@ for b = 1; b < 3; ++b: {
 a = "absdfa1";
 c = "absdfa1";
 b = "a" * 2;
+
+b = 2 < 2;
+print("To jest wartosc b: ", b, " ", 1);

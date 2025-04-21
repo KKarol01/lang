@@ -87,6 +87,9 @@ exec_expr_t Executor::make_expr(const parser::parse_expr_t expr) {
     case parser::Expression::Type::FOR_STMNT: {
         return std::make_unique<ForStmntExpression>(this, expr);
     }
+    case parser::Expression::Type::PRINT_STMNT: {
+        return std::make_unique<PrintStmnt>(this, expr);
+    }
     default: {
         Logger::DebugError("Unrecognized expression type: {}", parser::ExpressionUtils::get_expression_name(expr->m_type));
         assert(false);
@@ -387,6 +390,12 @@ ExpressionResult LogicalCompExpression::eval(ExecutorAllocator* alloc) {
             return a > b;
         } else if(type == lexer::Token::Type::EQUALS) {
             return a == b;
+        } else if(type == lexer::Token::Type::NOT_EQUALS) {
+            return a != b;
+        } else if(type == lexer::Token::Type::GEQ) {
+            return a >= b;
+        } else if(type == lexer::Token::Type::LEQ) {
+            return a <= b;
         } else {
             Logger::DebugWarn("Unhandled comparison operator: {}", get_node_value());
             assert(false);
@@ -426,6 +435,24 @@ ExpressionResult ForStmntExpression::eval(ExecutorAllocator* alloc) {
     alloc->get_top_stack_frame().m_return_stmn_hit = front.m_return_stmn_hit;
 
     return res;
+}
+
+ExpressionResult PrintStmnt::eval(ExecutorAllocator* alloc) {
+    std::print("[COUT] ");
+    dfs_traverse_expr_list(&*m_left, [alloc](auto* e) {
+        auto ret = e->eval(alloc);
+        literal_t* res = get_pmem(ret);
+        assert(!std::holds_alternative<std::monostate>(*res));
+        if(auto* e = std::get_if<int>(res)) {
+            std::print("{}", *e);
+        } else if(auto* e = std::get_if<double>(res)) {
+            std::print("{}", *e);
+        } else if(auto* e = std::get_if<std::string>(res)) {
+            std::print("{}", *e);
+        }
+    });
+    std::print("\n");
+    return ExpressionResult{ .m_type = m_expr->m_node.m_type };
 }
 
 } // namespace interpreter

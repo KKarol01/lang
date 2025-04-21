@@ -8,6 +8,9 @@ Tokenizer::Tokenizer() {
     define_operator(Operator{ Token::Type::INC, "++" });
     define_operator(Operator{ Token::Type::DEC, "--" });
     define_operator(Operator{ Token::Type::EQUALS, "==" });
+    define_operator(Operator{ Token::Type::NOT_EQUALS, "!=" });
+    define_operator(Operator{ Token::Type::GEQ, ">=" });
+    define_operator(Operator{ Token::Type::LEQ, "<=" });
     define_operator(Operator{ Token::Type::LOGICAL_AND, "&&" });
     define_operator(Operator{ Token::Type::AND, "&" });
     define_operator(Operator{ Token::Type::ASSIGN, "=" });
@@ -23,6 +26,7 @@ Tokenizer::Tokenizer() {
     define_operator(Operator{ Token::Type::COLON, ":" });
     define_operator(Operator{ Token::Type::LT, "<" });
     define_operator(Operator{ Token::Type::GT, ">" });
+    define_operator(Operator{ Token::Type::NOT, "!" });
 
     define_keyword(Keyword{ Token::Type::BREAK, "break" });
     define_keyword(Keyword{ Token::Type::FUNC, "func" });
@@ -30,6 +34,7 @@ Tokenizer::Tokenizer() {
     define_keyword(Keyword{ Token::Type::IF, "if" });
     define_keyword(Keyword{ Token::Type::ELSE, "else" });
     define_keyword(Keyword{ Token::Type::FOR, "for" });
+    define_keyword(Keyword{ Token::Type::PRINT, "print" });
 }
 
 void Tokenizer::define_operator(const Operator& op) { m_operators.push_back(op); }

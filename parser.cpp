@@ -213,7 +213,8 @@ parse_expr_t Parser::parse_add_expr() {
 parse_expr_t Parser::parse_comp_expr() {
     auto left = parse_add_expr();
     while(get().m_type == parse_node_t::Type::LT || get().m_type == parse_node_t::Type::GT ||
-          get().m_type == parse_node_t::Type::EQUALS) {
+          get().m_type == parse_node_t::Type::EQUALS || get().m_type == parse_node_t::Type::NOT_EQUALS ||
+          get().m_type == parse_node_t::Type::GEQ || get().m_type == parse_node_t::Type::LEQ) {
         auto node = take();
         auto right = parse_add_expr();
         left = make_expr(Expression{ .m_type = Expression::Type::LOGICAL_COMPARE, .m_node = node, .m_left = left, .m_right = right });
@@ -270,8 +271,19 @@ parse_expr_t Parser::parse_break_statement() {
     return parse_return_statement();
 }
 
+parse_expr_t Parser::parse_print_statement() {
+    if(get().m_type == lexer::Token::Type::PRINT) {
+        auto ret = take();
+        check_or_throw(parse_node_t::Type::PAR_OPEN, true);
+        auto list = parse_expr_list();
+        check_or_throw(parse_node_t::Type::PAR_CLOSE, true);
+        return make_expr(Expression{ .m_type = Expression::Type::PRINT_STMNT, .m_node = ret, .m_left = list });
+    }
+    return parse_break_statement();
+}
+
 parse_expr_t Parser::parse_statement() {
-    auto list = parse_break_statement();
+    auto list = parse_print_statement();
     check_or_throw(parse_node_t::Type::TERMINATOR, true);
     return list;
 }
