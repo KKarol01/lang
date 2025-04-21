@@ -385,6 +385,8 @@ ExpressionResult LogicalOpExpression::eval(ExecutorAllocator* alloc) {
     int res = 0;
     if(m_expr->m_node.m_type == lexer::Token::Type::LOGICAL_AND) {
         res = std::get<int>(*get_pmem(left)) * std::get<int>(*get_pmem(right));
+    } else if(m_expr->m_node.m_type == lexer::Token::Type::LOGICAL_OR) {
+        res = std::max(std::get<int>(*get_pmem(left)), std::get<int>(*get_pmem(right)));
     } else {
         Logger::DebugWarn("Unhandled logical operator: {}", get_node_value());
         assert(false);

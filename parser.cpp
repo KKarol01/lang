@@ -228,7 +228,7 @@ parse_expr_t Parser::parse_comp_expr() {
 
 parse_expr_t Parser::parse_logical_expr() {
     auto left = parse_comp_expr();
-    while(get().m_type == parse_node_t::Type::LOGICAL_AND) {
+    while(get().m_type == parse_node_t::Type::LOGICAL_AND || get().m_type == parse_node_t::Type::LOGICAL_OR) {
         auto node = take();
         auto right = parse_comp_expr();
         left = make_expr(Expression{ .m_type = Expression::Type::LOGICAL_OP, .m_node = node, .m_left = left, .m_right = right });

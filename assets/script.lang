@@ -39,5 +39,5 @@ print(a);
 
 a = "absdfa1";
 c = "absdfa1";
-print("Is a == c? ", a == c);
+print("Is a == c? ", a == c && 0 == 1 || 1 == 1);
 a * c;
