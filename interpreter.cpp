@@ -167,7 +167,7 @@ ExpressionResult UnaryExpression::eval(ExecutorAllocator* alloc) {
         return {};
     }
     if(m_expr->m_node.m_type == lexer::Token::Type::MIN) {
-        res.m_memory = literal_t{ -(is_int(left) ? std::get<int>(*get_pmem(left)) : std::get<double>(*get_pmem(left))) };
+        res.m_memory = literal_t{ (is_int(left) ? -std::get<int>(*get_pmem(left)) : -std::get<double>(*get_pmem(left))) };
     } else if(m_expr->m_node.m_type == lexer::Token::Type::DEC) {
         res.m_memory = literal_t{ (is_int(left) ? --std::get<int>(*get_pmem(left)) : --std::get<double>(*get_pmem(left))) };
     } else if(m_expr->m_node.m_type == lexer::Token::Type::INC) {
@@ -205,7 +205,7 @@ ExpressionResult SubExpression::eval(ExecutorAllocator* alloc) {
     auto r_mem = get_pmem(right);
     ExpressionResult res{ .m_type = m_expr->m_node.m_type };
     if((is_int(left) && is_double(right)) || (is_int(right) && is_double(left)) || (is_double(left) && is_double(right))) {
-        res.m_memory = literal_t{ (double)(is_int(left) ? std::get<int>(*l_mem) : std::get<double>(*l_mem)) +
+        res.m_memory = literal_t{ (double)(is_int(left) ? std::get<int>(*l_mem) : std::get<double>(*l_mem)) -
                                   (double)(is_int(right) ? std::get<int>(*r_mem) : std::get<double>(*r_mem)) };
     } else if(is_int(left) && is_int(right)) {
         res.m_memory = literal_t{ std::get<int>(*l_mem) - std::get<int>(*r_mem) };
