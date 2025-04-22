@@ -1,3 +1,6 @@
+#pragma once
+#include <filesystem>
+
 /**
  * @class Application
  * @brief Represents an application that works with source code from a file.
