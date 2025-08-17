@@ -172,6 +172,11 @@ ExpressionResult UnaryExpression::eval(ExecutorAllocator* alloc) {
         res.m_memory = literal_t{ (is_int(left) ? --std::get<int>(*get_pmem(left)) : --std::get<double>(*get_pmem(left))) };
     } else if(m_expr->m_node.m_type == lexer::Token::Type::INC) {
         res.m_memory = literal_t{ (is_int(left) ? ++std::get<int>(*get_pmem(left)) : ++std::get<double>(*get_pmem(left))) };
+    } else if(m_expr->m_node.m_type == lexer::Token::Type::NOT) {
+        res.m_memory = literal_t{ 1 - std::get<int>(*get_pmem(left)) };
+    } else {
+        throw std::runtime_error{ std::format("[{}] Unsupported unary operator {}.", m_expr->m_node.line_number,
+                                              m_expr->m_node.m_value) };
     }
     return res;
 }

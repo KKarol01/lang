@@ -38,6 +38,6 @@ for b = 1; b < 3; ++b: {
 print(a);
 
 a = "absdfa1";
-c = "absdfa1";
-print("Is a == c? ", a == c && 0 == 1 || 1 == 1);
+c = "absdfa";
+print("Is a == c? ", a == c);
 a * c;

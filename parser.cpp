@@ -170,7 +170,7 @@ parse_expr_t Parser::parse_unar_expr() {
     parse_expr_t left{ nullptr };
     parse_expr_t* next{ nullptr };
     while(get().m_type == parse_node_t::Type::INC || get().m_type == parse_node_t::Type::DEC ||
-          get().m_type == parse_node_t::Type::MIN) {
+          get().m_type == parse_node_t::Type::MIN || get().m_type == parse_node_t::Type::NOT) {
         auto node = take();
         if(!next) {
             left = make_expr(Expression{ .m_type = Expression::Type::UNARY, .m_node = node });
